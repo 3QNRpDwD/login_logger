@@ -1,0 +1,116 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>사용자 정보</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        var userData = {
+  "123": {
+    "username": "123",
+    "password": "MTIz",
+    "timestamp": "2024-08-11 19:13:37"
+  },
+  "test 1": {
+    "username": "test 123",
+    "password": "dGVzdCAxMjM0QEAh",
+    "timestamp": "2024-08-11 19:13:48"
+  },
+  "test 2": {
+    "username": "test 321",
+    "password": "dGVzdCAzMjFAQCE=",
+    "timestamp": "2024-08-11 19:14:01"
+  }
+};
+
+        function togglePassword(safe_platform) {
+            let passwordElement = document.getElementById('password_' + safe_platform);
+            let buttonElement = document.getElementById('button_' + safe_platform);
+            if (userData[safe_platform] && userData[safe_platform].password) {
+                if (passwordElement.textContent === '********') {
+                    let decodedPassword = atob(userData[safe_platform].password);
+                    passwordElement.textContent = decodedPassword;
+                    buttonElement.textContent = '가리기';
+                } else {
+                    passwordElement.textContent = '********';
+                    buttonElement.textContent = '보기';
+                }
+            }
+        }
+
+        function deletePlatform(safe_platform) {
+            if (confirm('정말로 이 플랫폼을 삭제하시겠습니까?')) {
+                delete userData[safe_platform];
+                document.getElementById(safe_platform + '_info').remove();
+            }
+        }
+
+        function copyToClipboard(text, buttonId) {
+            let button = document.getElementById(buttonId);
+            let originalText = button.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                button.textContent = '복사 성공';
+                button.classList.remove('bg-gray-300', 'text-gray-700');
+                button.classList.add('bg-green-500', 'text-white');
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.classList.remove('bg-green-500', 'text-white');
+                    button.classList.add('bg-gray-300', 'text-gray-700');
+                }, 2000);
+            }, (err) => {
+                button.textContent = '복사 실패';
+                button.classList.remove('bg-gray-300', 'text-gray-700');
+                button.classList.add('bg-red-500', 'text-white');
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.classList.remove('bg-red-500', 'text-white');
+                    button.classList.add('bg-gray-300', 'text-gray-700');
+                }, 2000);
+                console.error('복사 실패: ', err);
+            });
+        }
+
+        function renderUserData() {
+            let container = document.getElementById('user-data-container');
+            container.innerHTML = '';
+            for (let safe_platform in userData) {
+                let div = document.createElement('div');
+                div.id = safe_platform + '_info';
+                div.className = 'bg-white p-8 rounded-lg shadow-md mb-8';
+                div.innerHTML = `
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-2xl font-bold">${safe_platform}</h2>
+                        <button onclick="deletePlatform('${safe_platform}')" class="px-2 py-1 bg-red-500 text-white rounded">삭제</button>
+                    </div>
+                    <div class="mb-4 flex items-center">
+                        <p class="text-gray-700 mr-2"><span class="font-semibold">아이디:</span> ${userData[safe_platform].username}</p>
+                        <button id="copy_username_${safe_platform}" onclick="copyToClipboard('${userData[safe_platform].username}', 'copy_username_${safe_platform}')" class="px-2 py-1 bg-gray-300 text-gray-700 rounded">복사</button>
+                    </div>
+                    <div class="mb-4 flex items-center">
+                        <p class="text-gray-700 mr-2">
+                            <span class="font-semibold">비밀번호:</span>
+                            <span id="password_${safe_platform}">********</span>
+                        </p>
+                        <button id="button_${safe_platform}" onclick="togglePassword('${safe_platform}')" class="px-2 py-1 bg-blue-500 text-white rounded mr-2">보기</button>
+                        <button id="copy_password_${safe_platform}" onclick="copyToClipboard(atob(userData['${safe_platform}'].password), 'copy_password_${safe_platform}')" class="px-2 py-1 bg-gray-300 text-gray-700 rounded">복사</button>
+                    </div>
+                    <div class="mt-2 text-sm text-gray-500">
+                        <p>마지막 업데이트: ${userData[safe_platform].timestamp}</p>
+                    </div>
+                `;
+                container.appendChild(div);
+            }
+        }
+
+        window.onload = renderUserData;
+    </script>
+</head>
+<body class="bg-gray-100 min-h-screen py-8">
+    <div class="container mx-auto">
+        <h1 class="text-3xl font-bold mb-8 text-center">사용자 정보</h1>
+        <div id="user-data-container"></div>
+    </div>
+</body>
+</html>
