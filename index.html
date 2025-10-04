@@ -1,116 +1,1301 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <title>Vault – Secure & Stylish</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+      
+      :root{
+        --bg1:#0a0e1a; --bg2:#050810; --card:#ffffff; --muted:#94a3b8; 
+        --accent:#8b5cf6; --accent-hover:#7c3aed; --glow:#a78bfa;
+      }
+      
+      *{box-sizing:border-box;}
+      html,body{height:100%;margin:0;padding:0;}
+      
+      body{
+        min-height:100vh;
+        background:radial-gradient(ellipse at top, #1e1b4b 0%, #0f172a 50%, #020617 100%);
+        position:relative;
+        color:#111827;
+        font-family:'Inter', system-ui, -apple-system, sans-serif;
+        overflow-x:hidden;
+      }
+      
+      /* Animated background particles */
+      body::before{
+        content:'';
+        position:fixed;
+        top:0;left:0;right:0;bottom:0;
+        background-image:
+          radial-gradient(circle at 20% 50%, rgba(139, 92, 246, 0.1) 0%, transparent 50%),
+          radial-gradient(circle at 80% 80%, rgba(6, 182, 212, 0.1) 0%, transparent 50%),
+          radial-gradient(circle at 40% 20%, rgba(236, 72, 153, 0.08) 0%, transparent 50%);
+        animation:drift 20s ease-in-out infinite;
+        pointer-events:none;
+        z-index:0;
+      }
+      
+      @keyframes drift{
+        0%,100%{transform:translate(0,0) scale(1);}
+        50%{transform:translate(30px,-30px) scale(1.1);}
+      }
+      
+      .site-wrap{
+        max-width:1200px;
+        margin:0 auto;
+        padding:48px 32px;
+        position:relative;
+        z-index:1;
+      }
+      
+      .hero{
+        display:flex;
+        align-items:center;
+        gap:24px;
+        margin-bottom:48px;
+        animation:fadeInDown 0.6s ease-out;
+      }
+      
+      @keyframes fadeInDown{
+        from{opacity:0;transform:translateY(-20px);}
+        to{opacity:1;transform:translateY(0);}
+      }
+      @keyframes fadeInUp{
+        from{opacity:0;transform:translateY(20px);}
+        to{opacity:1;transform:translateY(0);}
+      }
 
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>사용자 정보</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        var userData = {
-  "123": {
-    "username": "123",
-    "password": "MTIz",
-    "timestamp": "2024-08-11 19:13:37"
-  },
-  "test 1": {
-    "username": "test 123",
-    "password": "dGVzdCAxMjM0QEAh",
-    "timestamp": "2024-08-11 19:13:48"
-  },
-  "test 2": {
-    "username": "test 321",
-    "password": "dGVzdCAzMjFAQCE=",
-    "timestamp": "2024-08-11 19:14:01"
-  }
-};
+      /* Dashboard Styles */
+      #dashboard {
+        opacity: 0;
+        animation: fadeInUp 0.8s 0.2s ease-out forwards;
+      }
+      .stat-card {
+        background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 16px;
+        padding: 24px;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        transition: all 0.3s ease;
+      }
+      .stat-card:hover {
+        transform: translateY(-5px);
+        background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+        border-color: rgba(139,92,246,0.3);
+      }
+      .stat-card-icon {
+        font-size: 32px;
+        width: 60px;
+        height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background-color: rgba(139,92,246,0.1);
+        color: var(--accent);
+      }
+      .stat-card-title {
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .stat-card-value {
+        font-size: 28px;
+        font-weight: 700;
+        color: #fff;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .chart-card {
+        background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 16px;
+        padding: 24px;
+        height: 350px;
+        position: relative;
+      }
+      .chart-card h5 {
+        color: #fff;
+        margin-bottom: 16px;
+      }
+      .table-glass {
+        background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 16px;
+        backdrop-filter: blur(12px);
+        color: #fff;
+        width: 100%;
+        animation: fadeIn 0.5s ease-out;
+      }
+      .table-glass th {
+        color: var(--muted);
+        font-weight: 500;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .table-glass th, .table-glass td {
+        padding: 16px 20px;
+        border-top: 1px solid rgba(255,255,255,0.1);
+        vertical-align: middle;
+      }
+      .table-glass tbody tr:first-child th,
+      .table-glass tbody tr:first-child td {
+        border-top: none;
+      }
+      .table-glass .note-cell {
+        max-width: 250px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .table-glass .actions-cell {
+        text-align: right;
+        white-space: nowrap;
+      }
+      .btn-group .btn.active {
+        background-color: var(--accent);
+        color: white;
+        border-color: var(--accent);
+        box-shadow: 0 0 12px rgba(139,92,246,0.5);
+      }
+      
+      .logo{
+        width:80px;
+        height:80px;
+        border-radius:20px;
+        background:linear-gradient(135deg,var(--accent),#06b6d4);
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        color:white;
+        font-weight:700;
+        font-size:32px;
+        box-shadow:0 20px 60px rgba(139,92,246,0.4), 0 0 40px rgba(139,92,246,0.2);
+        position:relative;
+        transition:transform 0.3s ease;
+      }
+      
+      .logo::before{
+        content:'';
+        position:absolute;
+        inset:-2px;
+        border-radius:20px;
+        padding:2px;
+        background:linear-gradient(135deg, rgba(139,92,246,0.5), rgba(6,182,212,0.5));
+        -webkit-mask:linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite:xor;
+        mask-composite:exclude;
+        opacity:0;
+        transition:opacity 0.3s;
+      }
+      
+      .logo:hover{transform:scale(1.05);}
+      .logo:hover::before{opacity:1;}
+      
+      .hero h1{
+        color:#fff;
+        margin:0;
+        font-size:36px;
+        font-weight:700;
+        letter-spacing:-0.5px;
+      }
+      
+      .hero p{
+        margin:4px 0 0 0;
+        color:rgba(255,255,255,0.7);
+        font-size:15px;
+      }
 
-        function togglePassword(safe_platform) {
-            let passwordElement = document.getElementById('password_' + safe_platform);
-            let buttonElement = document.getElementById('button_' + safe_platform);
-            if (userData[safe_platform] && userData[safe_platform].password) {
-                if (passwordElement.textContent === '********') {
-                    let decodedPassword = atob(userData[safe_platform].password);
-                    passwordElement.textContent = decodedPassword;
-                    buttonElement.textContent = '가리기';
-                } else {
-                    passwordElement.textContent = '********';
-                    buttonElement.textContent = '보기';
-                }
-            }
-        }
+      .controls{
+        display:flex;
+        gap:12px;
+        align-items:center;
+        margin-bottom:32px;
+        flex-wrap:wrap;
+        animation:fadeIn 0.8s ease-out 0.2s both;
+      }
+      
+      @keyframes fadeIn{
+        from{opacity:0;}
+        to{opacity:1;}
+      }
+      
+      .search-input{
+        flex:1;
+        min-width:280px;
+        max-width:480px;
+        background:rgba(255,255,255,0.05);
+        border:1px solid rgba(255,255,255,0.1);
+        color:#fff;
+        border-radius:12px;
+        padding:12px 16px;
+        font-size:14px;
+        transition:all 0.3s ease;
+        backdrop-filter:blur(8px);
+      }
+      
+      .search-input:focus{
+        outline:none;
+        background:rgba(255,255,255,0.08);
+        border-color:var(--accent);
+        box-shadow:0 0 0 3px rgba(139,92,246,0.1), 0 8px 24px rgba(139,92,246,0.2);
+      }
+      
+      .search-input::placeholder{color:rgba(255,255,255,0.4);}
+      
+      .btn{
+        padding:10px 20px;
+        border-radius:10px;
+        font-weight:500;
+        font-size:14px;
+        transition:all 0.3s ease;
+        border:none;
+      }
+      
+      .btn-light{
+        background:linear-gradient(135deg, #8b5cf6, #7c3aed);
+        color:white;
+        box-shadow:0 4px 12px rgba(139,92,246,0.3);
+      }
+      
+      .btn-light:hover{
+        background:linear-gradient(135deg, #7c3aed, #6d28d9);
+        transform:translateY(-2px);
+        box-shadow:0 6px 20px rgba(139,92,246,0.4);
+      }
+      
+      .btn-outline-light{
+        background:rgba(255,255,255,0.05);
+        color:rgba(255,255,255,0.9);
+        border:1px solid rgba(255,255,255,0.1);
+      }
+      
+      .btn-outline-light:hover{
+        background:rgba(255,255,255,0.1);
+        border-color:rgba(255,255,255,0.2);
+        transform:translateY(-2px);
+      }
 
-        function deletePlatform(safe_platform) {
-            if (confirm('정말로 이 플랫폼을 삭제하시겠습니까?')) {
-                delete userData[safe_platform];
-                document.getElementById(safe_platform + '_info').remove();
-            }
-        }
+      .cards{
+        display:grid;
+        grid-template-columns:repeat(auto-fill,minmax(340px,1fr));
+        gap:20px;
+        animation:fadeIn 1s ease-out 0.4s both;
+      }
+      
+      .card-glass{
+        background:linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+        backdrop-filter:blur(12px);
+        border-radius:16px;
+        padding:24px;
+        box-shadow:0 8px 32px rgba(0,0,0,0.4);
+        border:1px solid rgba(255,255,255,0.08);
+        transition:all 0.3s ease;
+        position:relative;
+        overflow:hidden;
+      }
+      
+      .card-glass::before{
+        content:'';
+        position:absolute;
+        top:0;left:0;right:0;
+        height:1px;
+        background:linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+      }
+      
+      .card-glass:hover{
+        transform:translateY(-4px);
+        box-shadow:0 12px 48px rgba(139,92,246,0.3);
+        border-color:rgba(139,92,246,0.3);
+      }
+      
+      .card-glass .d-flex > div:first-child { min-width: 0; }
 
-        function copyToClipboard(text, buttonId) {
-            let button = document.getElementById(buttonId);
-            let originalText = button.textContent;
-            navigator.clipboard.writeText(text).then(() => {
-                button.textContent = '복사 성공';
-                button.classList.remove('bg-gray-300', 'text-gray-700');
-                button.classList.add('bg-green-500', 'text-white');
-                setTimeout(() => {
-                    button.textContent = originalText;
-                    button.classList.remove('bg-green-500', 'text-white');
-                    button.classList.add('bg-gray-300', 'text-gray-700');
-                }, 2000);
-            }, (err) => {
-                button.textContent = '복사 실패';
-                button.classList.remove('bg-gray-300', 'text-gray-700');
-                button.classList.add('bg-red-500', 'text-white');
-                setTimeout(() => {
-                    button.textContent = originalText;
-                    button.classList.remove('bg-red-500', 'text-white');
-                    button.classList.add('bg-gray-300', 'text-gray-700');
-                }, 2000);
-                console.error('복사 실패: ', err);
-            });
-        }
+      .platform{
+        font-weight:700;
+        font-size:18px;
+        color:white;
+        margin-bottom:4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      
+      .username{
+        color:var(--muted);
+        font-size:13px;
+        margin-bottom:12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      
+      .note{
+        color:rgba(255,255,255,0.6);
+        font-size:13px;
+        line-height:1.5;
+        margin-top:12px;
+        padding-top:12px;
+        border-top:1px solid rgba(255,255,255,0.06);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        word-break: break-word;
+      }
+      
+      .pw{
+        font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,monospace;
+        background:rgba(0,0,0,0.3);
+        padding:8px 12px;
+        border-radius:8px;
+        color:#fff;
+        font-size:14px;
+        letter-spacing:0.5px;
+        word-break: break-all;
+      }
 
-        function renderUserData() {
-            let container = document.getElementById('user-data-container');
-            container.innerHTML = '';
-            for (let safe_platform in userData) {
-                let div = document.createElement('div');
-                div.id = safe_platform + '_info';
-                div.className = 'bg-white p-8 rounded-lg shadow-md mb-8';
-                div.innerHTML = `
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-2xl font-bold">${safe_platform}</h2>
-                        <button onclick="deletePlatform('${safe_platform}')" class="px-2 py-1 bg-red-500 text-white rounded">삭제</button>
-                    </div>
-                    <div class="mb-4 flex items-center">
-                        <p class="text-gray-700 mr-2"><span class="font-semibold">아이디:</span> ${userData[safe_platform].username}</p>
-                        <button id="copy_username_${safe_platform}" onclick="copyToClipboard('${userData[safe_platform].username}', 'copy_username_${safe_platform}')" class="px-2 py-1 bg-gray-300 text-gray-700 rounded">복사</button>
-                    </div>
-                    <div class="mb-4 flex items-center">
-                        <p class="text-gray-700 mr-2">
-                            <span class="font-semibold">비밀번호:</span>
-                            <span id="password_${safe_platform}">********</span>
-                        </p>
-                        <button id="button_${safe_platform}" onclick="togglePassword('${safe_platform}')" class="px-2 py-1 bg-blue-500 text-white rounded mr-2">보기</button>
-                        <button id="copy_password_${safe_platform}" onclick="copyToClipboard(atob(userData['${safe_platform}'].password), 'copy_password_${safe_platform}')" class="px-2 py-1 bg-gray-300 text-gray-700 rounded">복사</button>
-                    </div>
-                    <div class="mt-2 text-sm text-gray-500">
-                        <p>마지막 업데이트: ${userData[safe_platform].timestamp}</p>
-                    </div>
-                `;
-                container.appendChild(div);
-            }
-        }
+      .muted{color:var(--muted);}
+      
+      .btn-outline-accent{
+        color:var(--accent);
+        background:rgba(139,92,246,0.1);
+        border:1px solid rgba(139,92,246,0.2);
+        transition:all 0.3s ease;
+      }
+      
+      .btn-outline-accent:hover{
+        background:rgba(139,92,246,0.2);
+        border-color:rgba(139,92,246,0.4);
+        transform:scale(1.05);
+      }
+      
+      .btn-outline-danger {
+        color: #f87171;
+        background-color: rgba(248, 113, 113, 0.1);
+        border-color: rgba(248, 113, 113, 0.2);
+      }
+      .btn-outline-danger:hover {
+          background-color: rgba(248, 113, 113, 0.2);
+          border-color: rgba(248, 113, 113, 0.4);
+          color: #ef4444;
+      }
+      
+      .modal-content{
+        background:linear-gradient(135deg, rgba(30,27,75,0.98), rgba(15,23,42,0.98));
+        backdrop-filter:blur(16px);
+        border:1px solid rgba(255,255,255,0.2);
+        border-radius:20px;
+        box-shadow:0 20px 60px rgba(0,0,0,0.5);
+      }
+      
+      .spinner-border{
+        border-color:rgba(139,92,246,0.3);
+        border-right-color:var(--accent);
+      }
 
-        window.onload = renderUserData;
-    </script>
-</head>
-<body class="bg-gray-100 min-h-screen py-8">
-    <div class="container mx-auto">
-        <h1 class="text-3xl font-bold mb-8 text-center">사용자 정보</h1>
-        <div id="user-data-container"></div>
+      /* Progress Modal Styles */
+      .progress-modal {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .progress-modal::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(139,92,246,0.1) 0%, transparent 70%);
+        animation: rotate 10s linear infinite;
+      }
+
+      @keyframes rotate {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      .progress-icon {
+        width: 80px;
+        height: 80px;
+        margin: 0 auto 24px;
+        background: linear-gradient(135deg, var(--accent), #06b6d4);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 36px;
+        box-shadow: 0 8px 32px rgba(139,92,246,0.4);
+        position: relative;
+        animation: pulse 2s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+      }
+
+      .progress-bar-container {
+        background: rgba(255,255,255,0.1);
+        border-radius: 12px;
+        height: 8px;
+        overflow: hidden;
+        position: relative;
+        margin: 24px 0;
+      }
+
+      .progress-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--accent), #06b6d4);
+        border-radius: 12px;
+        transition: width 0.3s ease;
+        box-shadow: 0 0 20px rgba(139,92,246,0.6);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .progress-bar-fill::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+        animation: shimmer 2s infinite;
+      }
+
+      @keyframes shimmer {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(100%); }
+      }
+
+      .progress-percentage {
+        font-size: 24px;
+        font-weight: 700;
+        color: white;
+        margin-bottom: 8px;
+      }
+
+      .progress-status {
+        color: rgba(255,255,255,0.7);
+        font-size: 14px;
+        margin-bottom: 4px;
+      }
+
+      .progress-detail {
+        color: rgba(255,255,255,0.5);
+        font-size: 12px;
+      }
+
+      .success-icon {
+        animation: successBounce 0.6s ease-out;
+      }
+
+      @keyframes successBounce {
+        0% { transform: scale(0); }
+        50% { transform: scale(1.2); }
+        100% { transform: scale(1); }
+      }
+
+      .error-icon {
+        animation: errorShake 0.5s ease-out;
+      }
+
+      @keyframes errorShake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-10px); }
+        75% { transform: translateX(10px); }
+      }
+      
+      /* Responsive */
+      @media(max-width:768px){
+        .site-wrap{padding:32px 20px;}
+        .hero{flex-direction:column;text-align:center;}
+        .hero h1{font-size:28px;}
+        .cards{grid-template-columns:1fr;}
+        .controls{flex-direction:column;align-items:stretch;}
+        .search-input{max-width:100%;}
+      }
+
+      /* === List view (card-like rows) === */
+      #list.list-view{
+        display:flex;
+        flex-direction:column;
+        gap:12px;
+        animation:fadeIn 0.5s both;
+      }
+
+      .list-item{
+        background: linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius:12px;
+        padding:12px 14px;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+        transition:all 0.25s ease;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+      }
+      .list-item:hover{
+        transform:translateY(-4px);
+        border-color: rgba(139,92,246,0.18);
+        box-shadow: 0 12px 36px rgba(139,92,246,0.08);
+      }
+
+      .list-item-left{ display:flex; align-items:center; gap:12px; min-width:0; }
+      .list-item-avatar{
+        width:48px; height:48px; border-radius:10px;
+        background: linear-gradient(135deg,var(--accent), #06b6d4);
+        display:flex; align-items:center; justify-content:center;
+        color:white; font-weight:700; font-size:16px;
+        flex-shrink:0;
+        box-shadow:0 8px 28px rgba(139,92,246,0.18);
+      }
+
+      .list-item-info{ min-width:0; overflow:hidden; }
+      .list-item .platform{
+        font-size:16px; color:#fff; font-weight:700;
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      }
+      .list-item .username{
+        font-size:13px; color:var(--muted);
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      }
+      .list-item .note{
+        color:rgba(255,255,255,0.6); font-size:13px;
+        max-width:480px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+        margin-top:6px;
+      }
+
+      .list-item .pw{
+        font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+        background:rgba(0,0,0,0.28); padding:6px 10px; border-radius:8px;
+        color:#fff; font-size:13px; letter-spacing:0.4px; margin-left:12px;
+        min-width:90px; text-align:center;
+      }
+
+      .list-item-actions{ display:flex; align-items:center; gap:8px; flex-shrink:0; margin-left:12px; }
+
+      /* responsive: stack small screens */
+      @media(max-width:640px){
+        .list-item{ flex-direction:column; align-items:stretch; gap:10px; padding:12px; }
+        .list-item-left{ width:100%; }
+        .list-item-actions{ justify-content:flex-end; margin-left:0; }
+        .list-item .pw{ margin-left:0; margin-top:6px; align-self:flex-end; }
+      }
+
+    </style>
+  </head>
+  <body>
+    <div class="site-wrap">
+      <div class="hero">
+        <div class="logo">SV</div>
+        <div>
+          <h1>Secure Vault</h1>
+          <p>Encrypted local vault – quick reveal, safe by design.</p>
+        </div>
+      </div>
+
+      <!-- Dashboard Section -->
+      <div id="dashboard" class="mb-5">
+        <div class="row g-4">
+          <!-- Stat Cards -->
+          <div class="col-md-4">
+            <div class="stat-card h-100" id="stat-total-accounts">
+              <div class="stat-card-icon"><i class="bi bi-shield-lock"></i></div>
+              <div class="stat-card-info">
+                <div class="stat-card-title">Total Accounts</div>
+                <div class="stat-card-value">0</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="stat-card h-100" id="stat-recent-accounts">
+              <div class="stat-card-icon"><i class="bi bi-calendar-plus"></i></div>
+              <div class="stat-card-info">
+                <div class="stat-card-title">Added This Month</div>
+                <div class="stat-card-value">0</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="stat-card h-100" id="stat-common-platform">
+              <div class="stat-card-icon"><i class="bi bi-star"></i></div>
+              <div class="stat-card-info">
+                <div class="stat-card-title">Top Platform</div>
+                <div class="stat-card-value">-</div>
+              </div>
+            </div>
+          </div>
+          <!-- Charts -->
+          <div class="col-md-7 col-lg-8 mt-4">
+            <div class="chart-card">
+              <h5>Activity</h5>
+              <canvas id="activityChart"></canvas>
+            </div>
+          </div>
+          <div class="col-md-5 col-lg-4 mt-4">
+            <div class="chart-card">
+              <h5>Platforms</h5>
+              <canvas id="platformChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <input id="q" class="form-control search-input" placeholder="Search platform or username" />
+        <button id="addBtn" class="btn btn-light">Add</button>
+        <button id="importBtn" class="btn btn-outline-light">Import</button>
+        <input type="file" id="importFile" accept=".html" style="display: none;" />
+        <button id="runWeb" class="btn btn-outline-light">Run local web UI</button>
+        <button id="exportBtn" class="btn btn-outline-light">Export</button>
+        <div class="btn-group ms-auto" role="group">
+          <button id="view-card-btn" type="button" class="btn btn-outline-accent active" title="Card View"><i class="bi bi-grid-3x3-gap-fill"></i></button>
+          <button id="view-list-btn" type="button" class="btn btn-outline-accent" title="List View"><i class="bi bi-list-ul"></i></button>
+        </div>
+      </div>
+
+      <div id="list" class="cards"></div>
+
     </div>
-</body>
+
+    <!-- Reveal modal -->
+    <div class="modal fade" id="revealModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content p-3 text-white">
+          <div class="modal-body text-center">
+            <div id="modalSpinner" class="mb-3">
+              <div class="spinner-border text-light" role="status"></div>
+            </div>
+            <div id="modalState" class="mb-2 muted">Decrypting password...</div>
+            <div id="modalPw" style="display:none;" class="fw-monospace">
+              <div class="h5">Password</div>
+              <div class="pw mt-2" id="revealed">••••••••</div>
+              <div class="mt-3 d-flex gap-2 justify-content-center">
+                <button id="copyBtn" class="btn btn-sm btn-outline-light"><i class="bi bi-clipboard"></i> Copy</button>
+                <button id="closeBtn" class="btn btn-sm btn-light">Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content p-3 text-white">
+          <form id="editForm">
+            <div class="modal-header border-0">
+              <h5 class="modal-title" id="editModalTitle">Add Entry</h5>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <input type="hidden" id="edit-id">
+              <div class="mb-3">
+                <label for="edit-platform" class="form-label text-white-50">Platform</label>
+                <input type="text" class="form-control search-input" id="edit-platform" required>
+              </div>
+              <div class="mb-3">
+                <label for="edit-username" class="form-label text-white-50">Username</label>
+                <input type="text" class="form-control search-input" id="edit-username" required>
+              </div>
+              <div class="mb-3">
+                <label for="edit-password" class="form-label text-white-50">Password</label>
+                <input type="password" class="form-control search-input" id="edit-password">
+                <div class="form-text" style="color: rgba(255,255,255,0.4)">Leave blank to keep existing password when editing.</div>
+              </div>
+              <div class="mb-3">
+                <label for="edit-note" class="form-label text-white-50">Note</label>
+                <textarea class="form-control search-input" id="edit-note" rows="3"></textarea>
+              </div>
+            </div>
+            <div class="modal-footer border-0">
+              <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-light">Save</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Progress Modal -->
+    <div class="modal fade" id="progressModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content progress-modal p-4 text-white">
+          <div class="modal-body text-center">
+            <div class="progress-icon" id="progressIcon">
+              <i class="bi bi-cloud-download"></i>
+            </div>
+            
+            <div class="progress-percentage" id="progressPercentage">0%</div>
+            <div class="progress-status" id="progressStatus">Initializing...</div>
+            <div class="progress-detail" id="progressDetail"></div>
+            
+            <div class="progress-bar-container">
+              <div class="progress-bar-fill" id="progressBarFill" style="width: 0%"></div>
+            </div>
+            
+            <div class="mt-4" id="progressActions" style="display: none;">
+              <button class="btn btn-light" onclick="closeProgressModal()">Done</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    let revealModal = null;
+    let editModal = null;
+    let progressModal = null;
+    const listEl = () => document.getElementById('list');
+    const qEl = () => document.getElementById('q');
+    let accounts = [];
+    let accountsHash = '';
+
+    function escapeHtml(s){ if(!s) return ''; return s.replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]); }
+
+    // Progress Modal Functions
+    function showProgressModal(type) {
+      const icon = document.getElementById('progressIcon');
+      const percentage = document.getElementById('progressPercentage');
+      const status = document.getElementById('progressStatus');
+      const detail = document.getElementById('progressDetail');
+      const barFill = document.getElementById('progressBarFill');
+      const actions = document.getElementById('progressActions');
+      
+      // Reset state
+      icon.className = 'progress-icon';
+      icon.innerHTML = type === 'export' ? '<i class="bi bi-cloud-upload"></i>' : '<i class="bi bi-cloud-download"></i>';
+      percentage.textContent = '0%';
+      status.textContent = type === 'export' ? 'Preparing export...' : 'Preparing import...';
+      detail.textContent = '';
+      barFill.style.width = '0%';
+      actions.style.display = 'none';
+      
+      progressModal.show();
+    }
+
+    function updateProgress(percent, statusText, detailText = '') {
+      const percentage = document.getElementById('progressPercentage');
+      const status = document.getElementById('progressStatus');
+      const detail = document.getElementById('progressDetail');
+      const barFill = document.getElementById('progressBarFill');
+      
+      percentage.textContent = `${percent}%`;
+      status.textContent = statusText;
+      detail.textContent = detailText;
+      barFill.style.width = `${percent}%`;
+    }
+
+    function showProgressSuccess(message) {
+      const icon = document.getElementById('progressIcon');
+      const status = document.getElementById('progressStatus');
+      const detail = document.getElementById('progressDetail');
+      const actions = document.getElementById('progressActions');
+      
+      icon.className = 'progress-icon success-icon';
+      icon.innerHTML = '<i class="bi bi-check-circle"></i>';
+      status.textContent = message;
+      detail.textContent = '';
+      actions.style.display = 'block';
+    }
+
+    function showProgressError(message) {
+      const icon = document.getElementById('progressIcon');
+      const status = document.getElementById('progressStatus');
+      const detail = document.getElementById('progressDetail');
+      const actions = document.getElementById('progressActions');
+      
+      icon.className = 'progress-icon error-icon';
+      icon.innerHTML = '<i class="bi bi-x-circle"></i>';
+      icon.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+      status.textContent = 'Error';
+      detail.textContent = message;
+      actions.style.display = 'block';
+    }
+
+    function closeProgressModal() {
+      progressModal.hide();
+    }
+
+    let platformChart = null;
+    let activityChart = null;
+
+    function updateDashboard(accounts) {
+      // 1. Calculate stats
+      const totalAccounts = accounts.length;
+      const now = new Date();
+      const oneMonthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+      
+      const recentAccounts = accounts.filter(a => {
+        try {
+          return a.created_at && new Date(a.created_at) > oneMonthAgo;
+        } catch(e) { return false; }
+      }).length;
+
+      const platformCounts = accounts.reduce((acc, item) => {
+          acc[item.platform] = (acc[item.platform] || 0) + 1;
+          return acc;
+      }, {});
+      const topPlatform = Object.keys(platformCounts).length > 0 ? Object.entries(platformCounts).sort((a,b) => b[1] - a[1])[0][0] : '-';
+
+      // 2. Update stat cards
+      document.querySelector('#stat-total-accounts .stat-card-value').textContent = totalAccounts;
+      document.querySelector('#stat-recent-accounts .stat-card-value').textContent = recentAccounts;
+      document.querySelector('#stat-common-platform .stat-card-value').textContent = topPlatform;
+
+      // 3. Platform Chart (Doughnut)
+      const platformData = {
+          labels: Object.keys(platformCounts),
+          datasets: [{
+              data: Object.values(platformCounts),
+              backgroundColor: ['#8b5cf6', '#3b82f6', '#10b981', '#f97316', '#ef4444', '#64748b', '#fde047', '#ec4899'],
+              borderColor: 'rgba(15, 23, 42, 0.8)',
+              borderWidth: 2,
+          }]
+      };
+      const platformCtx = document.getElementById('platformChart').getContext('2d');
+      if(platformChart) platformChart.destroy();
+      platformChart = new Chart(platformCtx, {
+          type: 'doughnut',
+          data: platformData,
+          options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                  legend: {
+                      display: false
+                  }
+              }
+          }
+      });
+
+      // 4. Activity Chart (Line)
+      const activityCounts = accounts.reduce((acc, item) => {
+          if (!item.created_at) return acc;
+          try {
+            const month = new Date(item.created_at).toISOString().slice(0, 7); // YYYY-MM
+            acc[month] = (acc[month] || 0) + 1;
+          } catch(e) {}
+          return acc;
+      }, {});
+      
+      const last12Months = [];
+      for (let i = 11; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          last12Months.push(d.toISOString().slice(0, 7));
+      }
+
+      const activityData = {
+          labels: last12Months,
+          datasets: [{
+              label: 'Accounts Added',
+              data: last12Months.map(m => activityCounts[m] || 0),
+              borderColor: '#8b5cf6',
+              backgroundColor: 'rgba(139, 92, 246, 0.2)',
+              fill: true,
+              tension: 0.4,
+              pointBackgroundColor: '#8b5cf6',
+              pointRadius: 4,
+              pointHoverRadius: 6
+          }]
+      };
+      const activityCtx = document.getElementById('activityChart').getContext('2d');
+      if(activityChart) activityChart.destroy();
+      activityChart = new Chart(activityCtx, {
+          type: 'line',
+          data: activityData,
+          options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                  x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false } },
+                  y: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.1)', drawBorder: false } }
+              }
+          }
+      });
+    }
+
+    async function load(){
+      try{
+        const res = await fetch('/api/list');
+        if(!res.ok) throw new Error('list failed: ' + res.status);
+        const newAccounts = await res.json();
+        const newHash = JSON.stringify(newAccounts);
+
+        if (newHash !== accountsHash) {
+          accounts = newAccounts;
+          accountsHash = newHash;
+          updateDashboard(accounts);
+          render();
+        }
+      }catch(e){
+        console.error('Load failed', e);
+        const el = listEl();
+        if(el) el.innerHTML = '<div class="text-light">Unable to load entries. Check server console or open devtools network tab.</div>';
+      }
+    }
+
+    let currentView = 'card'; // 'card' or 'list'
+
+    function render(){
+      const qv = (qEl() && qEl().value || '').toLowerCase();
+      const root = listEl();
+      if(!root) return;
+
+      const filteredAccounts = accounts.filter(a => (a.platform + ' ' + a.username).toLowerCase().includes(qv));
+
+      root.innerHTML = '';
+      root.className = currentView === 'card' ? 'cards' : 'list-view';
+
+      if (filteredAccounts.length === 0) {
+        root.innerHTML = `<div class="text-center p-5 text-white-50">No accounts found.</div>`;
+        return;
+      }
+
+      if (currentView === 'card') {
+        filteredAccounts.forEach(it => {
+          const el = document.createElement('div'); el.className='card-glass';
+          el.style.animation = 'fadeInUp 0.5s ease-out';
+          el.innerHTML = `
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="platform">${escapeHtml(it.platform)}</div>
+                <div class="username">${escapeHtml(it.username)}</div>
+              </div>
+              <div class="text-end">
+                <button class="btn btn-sm btn-outline-accent" onclick="show(${it.id}, this)" title="Show password"><i class="bi bi-eye"></i></button>
+                <button class="btn btn-sm btn-outline-light ms-1" onclick="editEntry(${it.id})" title="Edit"><i class="bi bi-pencil"></i></button>
+                <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteEntry(${it.id}, this)" title="Delete"><i class="bi bi-trash"></i></button>
+              </div>
+            </div>
+            ${it.note ? `<div class="note">${escapeHtml(it.note)}</div>` : ''}
+            <div class="mt-3">Password: <span class="pw" id="pw-${it.id}">****</span></div>
+          `;
+          root.appendChild(el);
+        });
+      } else { // List View
+        filteredAccounts.forEach(it => {
+                  const el = document.createElement('div');
+                  el.className = 'list-item';
+                  el.style.animation = 'fadeInUp 0.45s ease-out';
+
+                  el.innerHTML = `
+                    <div class="list-item-left">
+                      <div class="list-item-avatar">${escapeHtml((it.platform||'').slice(0,2).toUpperCase())}</div>
+                      <div class="list-item-info">
+                        <div class="platform">${escapeHtml(it.platform)}</div>
+                        <div class="username">${escapeHtml(it.username)}</div>
+                        ${it.note ? `<div class="note" title="${escapeHtml(it.note)}">${escapeHtml(it.note)}</div>` : ''}
+                      </div>
+                    </div>
+
+                    <div class="d-flex align-items-center">
+                      <div class="pw" id="pw-${it.id}">••••••••</div>
+                      <div class="list-item-actions">
+                        <button class="btn btn-sm btn-outline-accent" onclick="show(${it.id}, this)" title="Show password"><i class="bi bi-eye"></i></button>
+                        <button class="btn btn-sm btn-outline-light ms-1" onclick="editEntry(${it.id})" title="Edit"><i class="bi bi-pencil"></i></button>
+                        <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteEntry(${it.id}, this)" title="Delete"><i class="bi bi-trash"></i></button>
+                      </div>
+                    </div>
+                  `;
+                  root.appendChild(el);
+                });
+      }
+    }
+
+    async function show(id, btn){
+      if(!revealModal){
+        console.warn('revealModal not initialized');
+        return;
+      }
+      
+      // Reset modal state
+      document.getElementById('modalSpinner').style.display='block';
+      document.getElementById('modalPw').style.display='none';
+      document.getElementById('modalState').textContent = 'Decrypting password...';
+      document.getElementById('revealed').textContent = '••••••••';
+      
+      revealModal.show();
+
+      btn.disabled = true;
+      const original = btn.innerHTML;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+
+      try{
+        const r = await fetch('/api/decrypt?id='+id, {method:'POST'});
+        if(!r.ok) throw new Error('Decryption failed: ' + r.status);
+        const j = await r.json();
+
+        await new Promise(res => setTimeout(res, 600));
+
+        document.getElementById('modalSpinner').style.display='none';
+        document.getElementById('modalState').textContent = 'Decrypted';
+        document.getElementById('revealed').textContent = j.password;
+        document.getElementById('modalPw').style.display='block';
+
+        const pwSpan = document.getElementById('pw-'+id);
+        if(pwSpan) pwSpan.textContent = '••••••••';
+
+        // Copy button with auto-close
+        document.getElementById('copyBtn').onclick = async ()=>{
+          try{ 
+            await navigator.clipboard.writeText(j.password); 
+            alert('Copied to clipboard');
+            revealModal.hide();
+          }catch(e){ 
+            alert('Copy failed'); 
+          }
+        }
+
+      }catch(e){
+        document.getElementById('modalSpinner').style.display='none';
+        document.getElementById('modalState').textContent = 'Unable to decrypt';
+        document.getElementById('modalPw').style.display='none';
+        console.error(e);
+        alert('Error: ' + e.message);
+      }finally{
+        btn.disabled = false;
+        btn.innerHTML = original;
+      }
+    }
+
+    function addEntry() {
+      document.getElementById('editForm').reset();
+      document.getElementById('edit-id').value = '';
+      document.getElementById('editModalTitle').textContent = 'Add Entry';
+      document.querySelector('#edit-password + .form-text').style.display = 'none';
+      document.getElementById('edit-password').required = true;
+      editModal.show();
+    }
+
+    function editEntry(id) {
+      const account = accounts.find(a => a.id === id);
+      if (!account) return;
+      
+      document.getElementById('editForm').reset();
+      document.getElementById('edit-id').value = account.id;
+      document.getElementById('edit-platform').value = account.platform;
+      document.getElementById('edit-username').value = account.username;
+      document.getElementById('edit-note').value = account.note || '';
+      document.getElementById('editModalTitle').textContent = 'Edit Entry';
+      document.querySelector('#edit-password + .form-text').style.display = 'block';
+      document.getElementById('edit-password').required = false;
+      
+      editModal.show();
+    }
+
+    function editEntry(id) {
+      const account = accounts.find(a => a.id === id);
+      if (!account) return;
+      
+      document.getElementById('editForm').reset();
+      document.getElementById('edit-id').value = account.id;
+      document.getElementById('edit-platform').value = account.platform;
+      document.getElementById('edit-username').value = account.username;
+      document.getElementById('edit-note').value = account.note || '';
+      document.getElementById('editModalTitle').textContent = 'Edit Entry';
+      document.querySelector('#edit-password + .form-text').style.display = 'block';
+      document.getElementById('edit-password').required = false;
+      
+      editModal.show();
+    }
+
+    async function saveEntry(event) {
+      event.preventDefault();
+      const id = document.getElementById('edit-id').value;
+      const platform = document.getElementById('edit-platform').value;
+      const username = document.getElementById('edit-username').value;
+      const password = document.getElementById('edit-password').value.trim();
+      const note = document.getElementById('edit-note').value;
+
+      const isEdit = !!id;
+      const url = isEdit ? `/api/edit/${id}` : '/api/add';
+      const body = { platform, username, note };
+      
+      if (password || !isEdit) {
+        body.password = password;
+      }
+
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Save failed');
+        }
+        editModal.hide();
+        load(); // Reload the list
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+    async function deleteEntry(id, btn) {
+      if (!confirm('Are you sure you want to delete this entry?')) return;
+
+      const original = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+
+      try {
+        const res = await fetch(`/api/delete/${id}`, { method: 'POST' });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Delete failed');
+        }
+        load(); // Reload the list
+      } catch (e) {
+        alert('Error: ' + e.message);
+        btn.disabled = false;
+        btn.innerHTML = original;
+      }
+    }
+
+    async function exportHtml() {
+      showProgressModal('export');
+      updateProgress(10, 'Starting export...', 'Contacting server...');
+      try {
+        const res = await fetch('/api/export');
+        if (!res.ok) {
+          throw new Error('Export failed: ' + res.status);
+        }
+        
+        updateProgress(60, 'Processing data...', 'Server is preparing the export file.');
+        const htmlBlob = await res.blob();
+        
+        updateProgress(90, 'Finalizing...', 'Creating download link.');
+        const url = URL.createObjectURL(htmlBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `vault-export-${new Date().toISOString().slice(0,10)}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        updateProgress(100, 'Complete!', 'Your file has been downloaded.');
+        showProgressSuccess('Export successful!');
+      } catch (e) {
+        showProgressError('Error: ' + e.message);
+      }
+    }
+
+    function importHtml() {
+      document.getElementById('importFile').click();
+    }
+
+    async function uploadFile(file) {
+      showProgressModal('import');
+      updateProgress(10, 'Uploading file...', `Sending ${file.name}`);
+      
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const res = await fetch('/api/import', {
+          method: 'POST',          body: formData
+        });
+
+        updateProgress(60, 'Processing...', 'Server is importing accounts.');
+        const result = await res.json();
+        if (!res.ok) {
+          throw new Error(result.error || 'Import failed');
+        }
+
+        updateProgress(100, 'Complete!', result.message);
+        showProgressSuccess('Import finished!');
+        load(); // Refresh the list
+      } catch (e) {
+        showProgressError('Error: ' + e.message);
+      } finally {
+        // Reset file input
+        document.getElementById('importFile').value = '';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', ()=> {
+      try{
+        revealModal = new bootstrap.Modal(document.getElementById('revealModal'));
+        editModal = new bootstrap.Modal(document.getElementById('editModal'));
+        progressModal = new bootstrap.Modal(document.getElementById('progressModal'));
+
+        document.getElementById('closeBtn').onclick = ()=>{
+          revealModal.hide();
+        };
+      }catch(e){
+        console.error('Bootstrap modal init failed', e);
+      }
+      
+      document.getElementById('addBtn').addEventListener('click', addEntry);
+      document.getElementById('editForm').addEventListener('submit', saveEntry);
+      
+      const exportBtn = document.getElementById('exportBtn');
+      if(exportBtn) exportBtn.addEventListener('click', exportHtml);
+
+      const importBtn = document.getElementById('importBtn');
+      if(importBtn) importBtn.addEventListener('click', importHtml);
+
+      const importFileEl = document.getElementById('importFile');
+      if(importFileEl) importFileEl.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+          uploadFile(e.target.files[0]);
+        }
+      });
+      
+      const runWebBtn = document.getElementById('runWeb');
+      if(runWebBtn) runWebBtn.addEventListener('click', ()=>{ fetch('/api/ping').then(()=>alert('Web UI already running on server')).catch(()=>alert('Server not responding')) });
+
+      const qelem = qEl();
+      if(qelem) qelem.addEventListener('input', render);
+
+      const cardBtn = document.getElementById('view-card-btn');
+      const listBtn = document.getElementById('view-list-btn');
+      
+      cardBtn.addEventListener('click', () => {
+        if (currentView === 'card') return;
+        currentView = 'card';
+        cardBtn.classList.add('active');
+        listBtn.classList.remove('active');
+        render();
+      });
+
+      listBtn.addEventListener('click', () => {
+        if (currentView === 'list') return;
+        currentView = 'list';
+        listBtn.classList.add('active');
+        cardBtn.classList.remove('active');
+        render();
+      });
+
+      load(); // Initial load
+      setInterval(load, 2000); // Poll for changes every 2 seconds
+    });
+  </script>
+
+  </body>
 </html>
