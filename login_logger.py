@@ -438,7 +438,7 @@ class GUI:
         return False
     
     def open_server(self):
-        webbrowser.open("http://localhost:5000")
+        webbrowser.open("http://127.0.0.1:5000")
 
     def run_server(self):
         run_flask()
@@ -446,4 +446,5 @@ class GUI:
 if __name__ == "__main__":
     root = tk.Tk()
     gui = GUI(root)
+
     root.mainloop()
