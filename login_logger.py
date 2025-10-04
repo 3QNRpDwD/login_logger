@@ -1,450 +1,838 @@
-import os
-import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog, filedialog, scrolledtext
-import html
-import base64
-import json
-from datetime import datetime
-import webbrowser
-from flask import Flask, send_file
-import threading
-import logging
+"""
+Secure Login Vault
 
-app = Flask(__name__)
+Features implemented:
+- Uses SQLCipher (if available) for an encrypted SQLite DB (tries sqlcipher3 / pysqlcipher3 / sqlcipher3-binary).
+- If SQLCipher is not available, falls back to plain sqlite3 + per-password encryption using cryptography.Fernet with a key derived from the master password via PBKDF2.
+- Tkinter GUI (ttk) with a modern-ish look, a list of entries, add/edit/delete, and a "Show password" action that shows a progress bar while decrypting.
+- Embedded Flask web UI (served on 127.0.0.1 only). The web UI lists accounts; clicking "Show" requests the server to decrypt that single password and returns it; the web UI shows a progress animation while waiting.
 
-class TkinterHandler(logging.Handler):
-    def __init__(self, text_widget):
-        super().__init__()
-        self.text_widget = text_widget
+Notes:
+- You MUST provide a master password on startup. The master password is NOT stored; it's used to open the SQLCipher DB (PRAGMA key) or derive the Fernet key.
+- If you want real SQLCipher usage, install a Python wheel that includes SQLCipher (sqlcipher3-binary or pysqlcipher3) and have SQLCipher available on your system. Otherwise the fallback is used.
 
-    def emit(self, record):
-        log_entry = self.format(record)
-        self.text_widget.insert(tk.END, log_entry + '\n')
-        self.text_widget.see(tk.END)
+Dependencies:
+- cryptography
+- flask
+- (optional) sqlcipher3 / pysqlcipher3 / sqlcipher3-binary
 
-@app.route('/')
-def serve_html():
-    return send_file('user_info.html')
+Run: python login_vault.py
 
-def run_flask():
-    app.run(host='0.0.0.0', port=5000)
-
-def create_or_update_html(platform, username, password, update=False):
-    safe_platform = html.escape(platform)
-    safe_username = html.escape(username)
-    encoded_password = base64.b64encode(password.encode()).decode()
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    filename = "user_info.html"
-    
-    if os.path.exists(filename):
-        with open(filename, "r", encoding="utf-8") as file:
-            content = file.read()
-        
-        # Extract the existing data
-        data_start = content.find("var userData = ") + len("var userData = ")
-        data_end = content.find("};", data_start) + 1
-        user_data = json.loads(content[data_start:data_end])
-        
-        if safe_platform in user_data:
-            if not update:
-                return "update_query"
-        
-        user_data[safe_platform] = {
-            "username": safe_username,
-            "password": encoded_password,
-            "timestamp": timestamp
-        }
-        
-        # Update the content
-        new_data_json = json.dumps(user_data, indent=2)
-        new_content = content[:data_start] + new_data_json + content[data_end:]
-    else:
-        user_data = {
-            safe_platform: {
-                "username": safe_username,
-                "password": encoded_password,
-                "timestamp": timestamp
-            }
-        }
-        new_content = f"""
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>사용자 정보</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        var userData = {json.dumps(user_data, indent=2)};
-
-        function togglePassword(safe_platform) {{
-            let passwordElement = document.getElementById('password_' + safe_platform);
-            let buttonElement = document.getElementById('button_' + safe_platform);
-            if (userData[safe_platform] && userData[safe_platform].password) {{
-                if (passwordElement.textContent === '********') {{
-                    let decodedPassword = atob(userData[safe_platform].password);
-                    passwordElement.textContent = decodedPassword;
-                    buttonElement.textContent = '가리기';
-                }} else {{
-                    passwordElement.textContent = '********';
-                    buttonElement.textContent = '보기';
-                }}
-            }}
-        }}
-
-        function deletePlatform(safe_platform) {{
-            if (confirm('정말로 이 플랫폼을 삭제하시겠습니까?')) {{
-                delete userData[safe_platform];
-                document.getElementById(safe_platform + '_info').remove();
-            }}
-        }}
-
-        function copyToClipboard(text, buttonId) {{
-            let button = document.getElementById(buttonId);
-            let originalText = button.textContent;
-            navigator.clipboard.writeText(text).then(() => {{
-                button.textContent = '복사 성공';
-                button.classList.remove('bg-gray-300', 'text-gray-700');
-                button.classList.add('bg-green-500', 'text-white');
-                setTimeout(() => {{
-                    button.textContent = originalText;
-                    button.classList.remove('bg-green-500', 'text-white');
-                    button.classList.add('bg-gray-300', 'text-gray-700');
-                }}, 2000);
-            }}, (err) => {{
-                button.textContent = '복사 실패';
-                button.classList.remove('bg-gray-300', 'text-gray-700');
-                button.classList.add('bg-red-500', 'text-white');
-                setTimeout(() => {{
-                    button.textContent = originalText;
-                    button.classList.remove('bg-red-500', 'text-white');
-                    button.classList.add('bg-gray-300', 'text-gray-700');
-                }}, 2000);
-                console.error('복사 실패: ', err);
-            }});
-        }}
-
-        function renderUserData() {{
-            let container = document.getElementById('user-data-container');
-            container.innerHTML = '';
-            for (let safe_platform in userData) {{
-                let div = document.createElement('div');
-                div.id = safe_platform + '_info';
-                div.className = 'bg-white p-8 rounded-lg shadow-md mb-8';
-                div.innerHTML = `
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-2xl font-bold">${{safe_platform}}</h2>
-                        <button onclick="deletePlatform('${{safe_platform}}')" class="px-2 py-1 bg-red-500 text-white rounded">삭제</button>
-                    </div>
-                    <div class="mb-4 flex items-center">
-                        <p class="text-gray-700 mr-2"><span class="font-semibold">아이디:</span> ${{userData[safe_platform].username}}</p>
-                        <button id="copy_username_${{safe_platform}}" onclick="copyToClipboard('${{userData[safe_platform].username}}', 'copy_username_${{safe_platform}}')" class="px-2 py-1 bg-gray-300 text-gray-700 rounded">복사</button>
-                    </div>
-                    <div class="mb-4 flex items-center">
-                        <p class="text-gray-700 mr-2">
-                            <span class="font-semibold">비밀번호:</span>
-                            <span id="password_${{safe_platform}}">********</span>
-                        </p>
-                        <button id="button_${{safe_platform}}" onclick="togglePassword('${{safe_platform}}')" class="px-2 py-1 bg-blue-500 text-white rounded mr-2">보기</button>
-                        <button id="copy_password_${{safe_platform}}" onclick="copyToClipboard(atob(userData['${{safe_platform}}'].password), 'copy_password_${{safe_platform}}')" class="px-2 py-1 bg-gray-300 text-gray-700 rounded">복사</button>
-                    </div>
-                    <div class="mt-2 text-sm text-gray-500">
-                        <p>마지막 업데이트: ${{userData[safe_platform].timestamp}}</p>
-                    </div>
-                `;
-                container.appendChild(div);
-            }}
-        }}
-
-        window.onload = renderUserData;
-    </script>
-</head>
-<body class="bg-gray-100 min-h-screen py-8">
-    <div class="container mx-auto">
-        <h1 class="text-3xl font-bold mb-8 text-center">사용자 정보</h1>
-        <div id="user-data-container"></div>
-    </div>
-</body>
-</html>
 """
 
-    with open(filename, "w", encoding="utf-8") as file:
-        file.write(new_content)
+import os
+import sys
+import json
+import time
+import threading
+import traceback
+import re
+from datetime import datetime
+import urllib.request
+import base64
 
-    return f"HTML 파일이 생성되었거나 업데이트되었습니다: {filename}"
 
-def delete_platform(platform):
-    filename = "user_info.html"
-    if os.path.exists(filename):
-        with open(filename, "r", encoding="utf-8") as file:
-            content = file.read()
-        
-        # Extract the existing data
-        data_start = content.find("var userData = ") + len("var userData = ")
-        data_end = content.find("};", data_start) + 1
-        user_data = json.loads(content[data_start:data_end])
-        
-        if platform in user_data:
-            del user_data[platform]
-            
-            # Update the content
-            new_data_json = json.dumps(user_data, indent=2)
-            new_content = content[:data_start] + new_data_json + content[data_end:]
-            
-            with open(filename, "w", encoding="utf-8") as file:
-                file.write(new_content)
-            
-            return True
-    return False
+try:
+    # prefer sqlcipher3 (coleifer) / sqlcipher3-binary
+    from sqlcipher3 import dbapi2 as sqlcipher_dbapi
+    SQLCIPHER_PYTHON_MODULE = 'sqlcipher3'
+except Exception:
+    try:
+        from pysqlcipher3 import dbapi2 as sqlcipher_dbapi
+        SQLCIPHER_PYTHON_MODULE = 'pysqlcipher3'
+    except Exception:
+        sqlcipher_dbapi = None
+        SQLCIPHER_PYTHON_MODULE = None
 
-def open_file_action():
-    webbrowser.open("user_info.html")
+import sqlite3
+from getpass import getpass
 
-class GUI:
-    def __init__(self, master):
-        self.master = master
-        master.title("로그인 정보 관리")
-        master.geometry("850x650")
-        master.configure(bg='#f0f0f0')
-        master.iconphoto(False, tk.PhotoImage(data="""iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAMAAADDpiTIAAAAA3NCSVQICAjb4U/gAAAACXBIWXMAAAztAAAM7QFl1Q
-                                       BJAAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAAwBQTFRF////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-                                       AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-                                       AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-                                       AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-                                       AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-                                       AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-                                       AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-                                       AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-                                       AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACyO34QAAAP90
-                                       Uk5TAAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3
-                                       x9fn+AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnJ2en6ChoqOkpaanqKmqq6ytrq+wsbKztLW2t7i5uru8vb6/wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t/g4eLj5OXm5+jp6uvs7e7v8PHy8/T19vf4+fr7
-                                       /P3+6wjZNQAAFpRJREFUeNrt3Xd8FcXaB/BNBQIhKBBpQV5BOgTlEn3hlSpFxdA7oSkXgatwQYqgIogIqC++XIp0RPQCFwSkhCJGwSu9N6VIL4IkJISQ/tw/3o+ScpJndmd2Ocv8fn+fnTPnmW9O9szszhqGDQnuPHfjoRuZpF
-                                       3iDi5uZOgev6gNyaRxjjbWe/wjj5PmSR+k8fBX2EEIfazt+De6idEnIhqp6fgPSMXYExFRZhctx787Rv6PJD+n4fjXTcLA/5nYqtqNf+hFDHuWnHtMNwCLMejZsrewXuMfnoExz551floB2IwRz5nZOo1/BMY7d0ZpBGAyhtvD
-                                       dEBXfQCcxHB7mg5oqMv4V8Zge54OqKYJgB4Y6zymA0rpAWAEhjqP7NNjOmAaRjqvrNdiOmAZBjrPfKYDgGgPH3xAKT3CngCP1gDAJg+fW5cfwcXY6YBuAKA1AEppBABaA6C4agCgNQA6XwoAtAZA+wsDgNYAaIMfAGgNgOYAgN
-                                       4A6C0A0BtAZncA0BoApTQGAK0BUFx1ANAaAJ0vDQBaA6D9RQBAawC00R8AtAZAcwFAbwA0BgD0BpDZAwC0BkApTQBAawAUVwMAtAZAF0oDgNYA6EARANAaAEX7A4DWAGgeAOgNgMYCgN4AqCcA6A0gpSkAaA2AbtcAAK0B0MUy
-                                       AKA1ADoYDABaA6BN/gCgNQCaDwB6A6C3AUBvABQFAHoDSG0GAFoDoNs1AUBrAA/HdAAASORQMABoDYA2+wOA1gBoAQDoDYDeBQC9AVAvANAbgNunAwBANvG1AEBrAHSpLABoDcDd0wEAoCBb/AFAawC0EAD0BkDjAEBvANQbAP
-                                       QGkPo8AGgNgOJrA4DWANw6HQAAynK4KABoDYC2BACA1gBoEQDoDYDeAwC9AVBfANAbQGpzANAagPumAwBAcS6XAwCtAdCRogCgNQDaGgAAWgOgxQCgNwAaDwB6A6B+AKA3gLQWAKA1AEoIBwCtAdCVMADQGgAdDQEArQHQtwEA
-                                       oDUA+hwA9AZAEwBAbwD0CgDoDSCtJQBoDYAS6gCA1gBcMB0AAPbG66cDAMDmbAsAAK0B0BIA0BsAvQ8AegOgVwFAbwBprQBAawB05ykA0BoAXS0PAFoDoGMhAKA1APouEAC0BkBfAIDeAGgiAOgNgPoDgN4A0l4AAK0BeOd0AA
-                                       A4GG+cDgAAJ3O8GABoDYBiAgFAawC01AcAtAZArwOA3gDiSgCA1gDoMwDQG0DGowCgNQBqBAB6AxgMAF6SkAcDYBYAeEt+fyAA1gCAt2TzAwGwCQC8JZMAQG8AkQCgNwCfGADQGoBR4Q4AaA3A6A8AegMwOt4EAK0BGKFfA4DW
-                                       AAyjcrePY362KVc8lDcaAPRJV3wDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-                                       AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAaA2gRJtBExdtPno+S+556OGVnxEbHxmTmPUF+9bNHf9aZAknRv/JN7dnEOKVSf9+aAV7R7/A8BMos3fn4OAA24bfN+oCCuz9OdvNx57xb3EQxXVH9je3YfgD
-                                       56Gw7sm8QNXjX3I7quqmbC+pdvxrn0dN3ZXztZX++09ERd2WxBbqxr96POrpvsRXVzX+j55BNd2YM4+qGX//bailO7PNXwmA6aikW/MPFeNfLxOFdGsy6ykAEIM6ujcx8uP/Eqro5rwkvQB0FEV0c476SgLohRq6O70kAWxBCd
-                                       2dLXLjXzQVJXR3UotKAeiCCro9XaQAfIkCuj1fSs0Cx6GAbk+czHxwDdTP/akhAaA5yuf+yFwg2Aflc3/6SAAYg/K5P2MkAMxA+dyfGRIAvkb53J+vFd/0i7gsmwAAAPQFkHn54I7olYtnTJ44be5Xa7ftPp6gHYBoTQHE/7R4
-                                       TMfwoFyfqXSj/h+tPZn+wGVe37tq1icTxw4b1Ldr+54Dhr87ddbnqzb/eOhMkou/AW5uyjfHHatu0pbREX75frKQyGmHH8zFjpmnlo2NavxEnjfv+ZR/ftC0DafT3AiAeavXnKnw8fGNxG6NLNFx9k1Hxz79yOIhzwWLlT6gcu
-                                       uR624DgNncnP4XMx8woN1ap654uDy/Q4jpC/LqDv8mDgCEk7oq0vz2GKF/P2z74Kf9MNryvZq+Tw/7EQBEkjI7zOqa105bO3bkDdl7tKpMuQYATJJnhkl80Bf22NWvhLkRSu7Pi1ybBgD5fPnPKCdZ4Zdt2QBnX7/Cqm7R9bkB
-                                       AHnmpxryBfYdeld1t/a8ZKhLbfwLyHPKZ7CvkhJXjFHard0vKN2kZRgA5JHVZZV9yw5UN1G8q5XiXZo2AIDHJHZTWeXyu9T06lY/1Xv1BdwBAE/5tbbaOhf4QkWvlijeo8swjAb4Gegp3xZXXulR0lshn25mqM84APCQ//Wzod
-                                       St5U4EMiYVtKFTxnYAyF3qVw1bUvO6RKdiX7SlT4VTASDX+PcxbEpN64uEh5+wp0utMBWca/x7GbalTqzFTi0NsqlHHwNAzvGPMmxMPUtbY6a9YVuHDgJAjvHvYdia+hY2x01tb1t3SmQCQPaMNGxOJ/PL0ZHe1JuHHMBSw/Z8
-                                       ZHY9+kUbOzMHALIvsxW0H4CfuaWhpBZ2duYMAGTNVdPLP74h5j986GUzf//N7Bz/xwkAshb7GRMTKI16v7tw29lUSji8ZtobL9cws0bzrInJF1t/kxj9ACBrRgv3v/bMnD/nzgw3cX3eh8JdmmK5xL6PVKzXoM6TZULy28nlKw
-                                       DIkr2CCwBBfTxe63lvkfAOyoVE//WuN39FSsiLH34Zvfv0rftLTymxl37+96LR7WsUyPXi6wCQ5ddWTaGuF5ya910VezsIfn7BLXKOm9yLr2SHTw/ks+aYcTZ6WoesX1Q1CQDu5x2hnlc/km8j8wqJFUDo6oBbFU1NMn52Umim
-                                       a//Uln/MKw8BgPs5KLTrWX/uFssjVcT+Vm8JdKmTif/4bcws66bEDAgxDMNYBwB/JlPkzq9iK/iG7nQXqoDAH99q4XIGDTxl9vMmLW3m458AAH/mXyKruWIPOZxbQORU4grXTFxpwWI+9v7vlj7yuQUEAH8kvSrf6VIXBRv7Qq
-                                       QEf+NaEb0qpUMsPZg8VAAWCvzN7hZu7S2BEhS4lH8b2wS//ecSAYD8HGB5tss+y0ycULQVqMHA/P9Hi/0CqHOSAEABgE/5Lo83015iON9gYL7/UT4SKaPP0GQCAAUA0vjzrW7mWrzwGF+Ed/ITFCryo2QjEQCoAMD/BAgzu8XS
-                                       dn51qFw+G0pNFShiYAwBgBoA/JLr56bb7MxXIe+78hIF7gDyWUoAoAbAL+xfa7j5u3pO85vKtJNaBPyAAEARgGFsfzdbaHUQ26p/Xotxd0oITEoTACgCcI9dyW9hpdnr/B4eU/I4VODZzK3SAEAVAPbpR76HLLX7LluGZ/I4si
-                                       7/+/8OAYAqAB253lp8ymkCeybn63l7nmP8CeA+AgBVAJKLcL21Wu2JFn9c8PcmeMVjFx8WABu5zj5pteVf2Tp09nRYRhnusIDTAKAOwACZGbv889/sBXxplgo7iABAGYBM9u/N+mbk09lCeJrMY68oKXwdANQB2M31tbb1tq+z
-                                       1xm/l/ug9GD7vpIAIHcmcX2dJNE4+2zF1hZElkgAAIUA2KX7XyUaX8Q1Xjr3MZPtFAkAucKdAkTINH6bvTzwaq5j2I0gjwGAQgCXua4OkypSA675XFdmp3HTEmEEAAoBsE8/XCJVpMGmzwJ3ev8q0EMFgL0h9KhUkeZxzUeaPi
-                                       ldBQAqATTlLt6VW3Xby1WiVs4juJ3g/eMBQCWAUkxP68oV6R53w1lIziMqMQc0JABQCCCZuxjoVckqsU+cyPGjPpWbO5oEACoBnOJ6Kvug+54mf9Sd5F5/AABUAtjK9fRHySp9zL1BdPbXr+X+ZYhs7HfedG7qCmA+11PZUy52
-                                       sTnHRm3cDSFVRd7U/IB01RUAd9lWoOz3JDuzn2MioL+Kc0AAEE5vpqMlZQH8wpXizeyvb8S8vBMAKAXALddVkgXwm8mLO7h7QgcDgFIA9e2dBiBK4UrRO/vruXsCJwCAUgB1mI42lf6xFGTuO517+WcAoBTAk0xH20kD4JabX8
-                                       r26nSucqsBQCkAbnj6SAOozrxD42yvvs1V7t8AoBRAMaajQ6QBcGcZ9bO9mr084TQAKAXA3cL7rjQA7tbzZuZmguMBQCWANK6jE6QBRDDv8LK55ePrAKASQCbX0eHSALidQ7PfHLRdyfUpACAcbmvfV6UBcBcc9DE3c/wdACgF
-                                       wD0iuJM0AI5Y9pnAI1zllgOAUgBhTEdbyI5/qrm1gNNKrk8AAGX/oZ+RBXCTK0X23xmXTC4eAoAkgKdULL/nlzNcKaZme/nv3MuxGKQWAHfjRmlZAPu5Uvwz28vvci/vDABKAXB3BgbJAviOK8VP2V6ewb28CQAoBcA+lTlVEs
-                                       AC7g1yPDeA22K2OgAoBcBes3lEEsDrTPuBObag5B5d6BcHACoBrOB6ulgSQEOm/Yo5Xs/uMLsaAFQC2MX19HVJANyjZXNecTJCxc8AABDOVa6nDeTG/xzXft8cB8zkDqgi8K4VPORxAPC4GhTI9LRwhhSANVwlcj5Fdj1bu0vW
-                                       epIMAB7DXRRonJACMJ5rfmuOA/hdQhcBgEoAr3BdlduVvx3XfM5HfqWyjx7tAQAqAczmuiq3RUwFpvXc9x08x3WoFACoBLCH62p9mfE/av7sm98o+AAAKASQzF0V6HNJovW3uUJ8kusQ/oGx3QBAIQB2PTDHcp25cLcdGD/kOu
-                                       Q6WzzfXwBAIQB2r+hwG5cCAzw89+EJtnq9AEAhAHafOImNGdn/5808HMTuKWL4nQEAdQDucFNBxluW236ca3q6leUJw+gHAOoA8Bs6V8i02DK756Ph6Xn0d4PYw/zPAYA6APxzg63uE8RuE+p5J/qOfP3+CgDqALAX4lr83UUX
-                                       CnINe974fzlfv4DdAKAMAHtlsOHzk6V2e7Fl2OvxuMRCfAHDbgCAMgDsgo0RYeUs4LCv1ZOL9gIVbJoOAKoAXGIf7GLh2dEC+/4bk/M4co1ICUcCgCoA1JrtbxnzD+r8lm20QF67M2ZUEqnhSgBQBWAt3+ExZtvM5B//mveE3g
-                                       yRGgafAABFANLLsh0uaPbJQbP5IuzJ8+DER0SKWPU3AFADgN7hexxubs/YHwLYFuvlc/hooSqG7QMANQCuCfzwet7MLSJnivMN5ndieSVAqIyFlgKAEgD0d4E+9xD/LXi7Gt9c5XwfRdJfsJBvpgOACgAiXwHGKOFzipYCrf0r
-                                       3yZuhAhWskUsACgAQMNEev0PwcZeF2irHtPGNNFSVtoNAAoAXA8S6LXvJJGbBBK6i1RgG9NKWnXhYkYeAAD5jBDqd8MLbEP7hWZx+K1ntopX06fdYQCQTUI5oY6HfMUtLgeKNOMn8EfbzkQ9fToe0xlA39tWkmh6OvD/fwzczq
-                                       ejtyLFGhktcmL6mJmK+rZdcElbANbSKsebdBQ8rtzEvCr9y/DiYk3UShFaTfA1+YmqDdmQmEdbd6KHAwAD4Gox4b+2Vityj2DKsiaixwccEvvY48x/qMDGHyz77tiNLCerKb+d2vzWs9zzKwGAiOaYOLj4G9t+vT81mHp228iS
-                                       4gdPFPzYGc2sfjbf0JpNu3RqEVGlVEGxAwCAiDLbmqxy2fpdR306pkeDcua+qyOEZ++ulzIcCgAQEcVXcaLWoefEP/jOwgDgIAA6UcT+UhfcaeaTby0AAA4CoJW2V9pnubmPvtofABwEQKPsrvQHZsu8xAcAHASQ0dveQvc2X+
-                                       eZAOAgAMrobmede6ZZKPSXBQDAOQCU3sm+Mg+0dpfhjuIA4BwASmtnV5VHksWcqQwAzgGg1G72FHkiWU5sYwBwDgDRJF/1b1dwvsxqdepYPwBwDgB9E6z63aocJrnsrgoAzgGg45XUvlmPOySbpKE+AOAYAIrtrPCtCs0jFfm+
-                                       IgA4BoBotbKluOY/k5qkziwNAI4BoNg+St6n/CpSl7tTHgUApwAQbfov6XcpMPYuKc3td2xYsqwwCwA8f+fOCZN6D/+o06Q88bOeVlkH3/ofHrXUDx0AEKXMLGv5HQoPvUD2ZP9rRdUUoWinJTetdkIPAET3PrV28h36fizZl7
-                                       uLXgiSLECZDp/slHkqni4AiGjHK2b/4II6rbxHNid5y/AaVv811f3bV+dl318jAERJS5uLz8UWbL8skZzJpflRtcxdM1Tkqa4fxCjpnoMAdj5rQ4aaPf1eO6QWPxdXoP6INQnkaJL3zRtcn/9p4F+59bA5MVfUva+DALwmN1YM
-                                       apjn/FBg5TZTfkx+QD3LvLZv7ey3+7aoGRp8f3cRn+Cy1Z9t2emVYe/937pTaarfUkcARESUsP+f46NeblKvWtgjAQHFylZ+6n9adhuzIOZChrd0MOPurStnjx+7eNveHmkLAAEABAAQAAAAAAAAAAAAC1mJ8rk/MjdSTkf53J
-                                       /pEgBGoXzuj8yNtFEon/sTJQGgGcrn/jSTAFAV5XN/ZO5U8b2B+rk9N6Tun1uIAro9C6Uux2mDAro9baQABCWhgu5OkuQ1qd+ghO7ON5KXZHZACd2dDrIX5e5CDd2cXdJXZTdEEd2chvLX5eMsQOMzAMMwjOrpqKNbk15dAQBj
-                                       HArp1oxTMf6GzwpU0p1ZoWi3oqD9qKUbsz/IUJRy11BN9+VaOUNZnoYA942/0v1Jwg6gou7KgTBDaYJwgbCrsjLIUByfCZkoq1uSOcGO3UrDo1FZdyQ63LAnTfaguN6fPU0M+9IhOgUV9uakRHcw7E3RLsviUWfvTPyyrkUNBx
-                                       IY0XbghHnrv88ST1vtnfgeUZQTHsobm/UF6+dNGNg2ItB4YPF0G3FXA1EUT3tEb/KqHgIAAAAAAAAAAAAAAAAAAAAAAAAAAGDgAAABAAQAEABAAAABAAQAEABAAAABAAQAEABAAAABAAQAEABAAAABAAQAEABAAAABAAQAEABA
-                                       AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-                                       AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMHAAgGgMYO1kRFHWuhIAYmsAAAAAAAAAAAC8ItEYEKcT7VUAlmNAnM5yrwIwDQPidKZ5FYARGBCnM8KrAPTEgDidnl4FoDIG
-                                       xOlU9q7Z6pMYEWdz0suWKyZjSJzNZC8DEIEhcTYR3rZiuRlj4mQ2e92SdXgGRsW5ZIR730ULizEszmWxF161EnoR4+JULoZ643VLdZMwMs4kqa53XrnWHUPjTLp767WLA1IxOPYndYD3Xr3a6CbGx+7cbOTN1y9X2IERsjfbK3
-                                       j5JeyRxzFI9uVoa++/icEvakMyRsqOJK/v7uuOG1mCO8/deOhGJoZMVTJvHNo4t3MRO8bqP+lm959ipwKIAAAAAElFTkSuQmCC"""))
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
+from cryptography.fernet import Fernet
 
-        style = ttk.Style()
-        style.theme_use('clam')
+from tkinter import Tk, Toplevel, StringVar, messagebox, simpledialog, filedialog
+from tkinter import ttk
+import tkinter as tk
 
-        # 상단 프레임
-        top_frame = ttk.Frame(master, padding="10")
-        top_frame.pack(fill=tk.X)
+# Flask and web server
+from flask import Flask, jsonify, request, render_template, abort
 
-        # 왼쪽 프레임 (입력 폼)
-        left_frame = ttk.Frame(top_frame, padding="10", width=300)
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+# --------------------------- Vault backend ---------------------------
 
-        ttk.Label(left_frame, text="새 로그인 정보 추가", font=('Helvetica', 16, 'bold')).pack(pady=10)
+META_FILE = "vault_meta.json"
+DB_FILE = "vault.db"
+FALLBACK_DB_FILE = "vault_plain.db"
 
-        self.platform_var = tk.StringVar()
-        self.username_var = tk.StringVar()
-        self.password_var = tk.StringVar()
+SALT_SIZE = 16
+KDF_ITER = 390000
 
-        ttk.Label(left_frame, text="플랫폼:").pack(anchor='w', pady=5)
-        ttk.Entry(left_frame, textvariable=self.platform_var).pack(fill=tk.X, pady=5)
+BOOTSTRAP_CDN = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
 
-        ttk.Label(left_frame, text="아이디:").pack(anchor='w', pady=5)
-        ttk.Entry(left_frame, textvariable=self.username_var).pack(fill=tk.X, pady=5)
+class VaultError(Exception):
+    pass
 
-        ttk.Label(left_frame, text="비밀번호:").pack(anchor='w', pady=5)
-        ttk.Entry(left_frame, textvariable=self.password_var, show="*").pack(fill=tk.X, pady=5)
+class Vault:
+    """Abstraction over either an SQLCipher-backed DB or a sqlite3 fallback using Fernet encryption per-password."""
 
-        ttk.Button(left_frame, text="저장", command=self.submit).pack(pady=10)
-        ttk.Button(left_frame, text="파일 열기", command=open_file_action).pack(pady=5)
-        ttk.Button(left_frame, text="서버 열기", command=self.open_server).pack(pady=5)
+    def __init__(self, master_password: str):
+        self.master = master_password
+        self.use_sqlcipher = False
+        self.conn = None
+        self.backend = None  # 'sqlcipher' or 'fallback'
+        self.fernet = None
+        self.meta = {}
 
-        # 오른쪽 프레임 (플랫폼 목록)
-        right_frame = ttk.Frame(top_frame, padding="10", width=300)
-        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        # Decide approach
+        if sqlcipher_dbapi is not None:
+            try:
+                # try opening DB with SQLCipher
+                self.conn = sqlcipher_dbapi.connect(DB_FILE)
+                cur = self.conn.cursor()
+                # set key using provided master password
+                # Use PRAGMA key - SQLCipher understands passphrase
+                cur.execute("PRAGMA key = ?;", (self.master,))
+                # try a simple query to see if the key works or DB needs creation
+                try:
+                    cur.execute("SELECT count(*) FROM sqlite_master;")
+                    cur.fetchall()
+                except Exception:
+                    # maybe DB not initialized or key mismatch; we'll proceed and create tables
+                    pass
 
-        ttk.Label(right_frame, text="저장된 플랫폼", font=('Helvetica', 16, 'bold')).pack(pady=10)
+                self.use_sqlcipher = True
+                self.backend = 'sqlcipher'
+                self._ensure_tables_sqlcipher()
+                return
+            except Exception as e:
+                # If SQLCipher import present but key wrong or other problem, fallback
+                print("SQLCipher available but could not initialize; falling back to encrypted sqlite.\nReason:", e)
+                traceback.print_exc()
 
-        self.platform_listbox = tk.Listbox(right_frame)
-        self.platform_listbox.pack(fill=tk.BOTH, expand=True)
+        # Fallback: sqlite + per-password Fernet derived from master password
+        self.backend = 'fallback'
+        # load or create metadata (salt)
+        if os.path.exists(META_FILE):
+            with open(META_FILE, 'r') as f:
+                self.meta = json.load(f)
+            salt = bytes.fromhex(self.meta.get('salt'))
+        else:
+            salt = os.urandom(SALT_SIZE)
+            self.meta = {
+                'salt': salt.hex(),
+                'version': 1
+            }
+            with open(META_FILE, 'w') as f:
+                json.dump(self.meta, f)
 
-        button_frame = ttk.Frame(right_frame)
-        button_frame.pack(pady=10)
+        # derive a Fernet key from master password
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=KDF_ITER,
+            backend=default_backend()
+        )
+        key = kdf.derive(self.master.encode())
+        fkey = base64_urlsafe_from_bytes(key)
+        self.fernet = Fernet(fkey)
 
-        ttk.Button(button_frame, text="삭제", command=self.delete).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="이름 변경", command=self.rename_platform).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="새로고침", command=self.refresh_platform_list).pack(side=tk.LEFT, padx=5)
+        self.conn = sqlite3.connect(FALLBACK_DB_FILE, check_same_thread=False)
+        self._ensure_tables_fallback()
 
-        # 하단 프레임 (서버 로그)
-        bottom_frame = ttk.Frame(master)
-        bottom_frame.pack(fill=tk.BOTH, expand=True)
+    def _ensure_tables_sqlcipher(self):
+        cur = self.conn.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY, platform TEXT, username TEXT, password TEXT, note TEXT, created_at TEXT);")
+        self.conn.commit()
 
-        self.log_text = scrolledtext.ScrolledText(bottom_frame, height=10)
-        self.log_text.pack(fill=tk.BOTH, expand=True)
-        
-        ttk.Label(bottom_frame, text="서버 로그", font=('Helvetica', 16, 'bold')).pack(pady=10)
+    def _ensure_tables_fallback(self):
+        cur = self.conn.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY, platform TEXT, username TEXT, password TEXT, note TEXT, created_at TEXT);")
+        self.conn.commit()
 
-        # 로거 설정
-        self.setup_logger()
+    def add_account(self, platform, username, password, note="", created_at=None):
+        ts = created_at or datetime.utcnow().isoformat()
+        if self.backend == 'sqlcipher':
+            cur = self.conn.cursor()
+            cur.execute("INSERT INTO accounts (platform, username, password, note, created_at) VALUES (?, ?, ?, ?, ?)", (platform, username, password, note, ts))
+            self.conn.commit()
+            return cur.lastrowid
+        else:
+            # encrypt the password with Fernet
+            token = self.fernet.encrypt(base64.b64encode(password.encode())).decode()
+            cur = self.conn.cursor()
+            cur.execute("INSERT INTO accounts (platform, username, password, note, created_at) VALUES (?, ?, ?, ?, ?)", (platform, username, token, note, ts))
+            self.conn.commit()
+            return cur.lastrowid
 
-        self.refresh_platform_list()
-        
-        threading.Thread(target=self.run_server, daemon=True).start()
-        logging.getLogger('tkinter_logger').info("Server started: http://localhost:5000")
-        
-    def setup_logger(self):
-        logger = logging.getLogger('tkinter_logger')
-        logger.setLevel(logging.INFO)
-        
-        tk_handler = TkinterHandler(self.log_text)
-        tk_handler.setLevel(logging.INFO)
-        
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        tk_handler.setFormatter(formatter)
-        
-        logger.addHandler(tk_handler)
+    def list_accounts(self):
+        cur = self.conn.cursor()
+        cur.execute("SELECT id, platform, username, created_at, note FROM accounts ORDER BY platform COLLATE NOCASE;")
+        rows = cur.fetchall()
+        return [{'id': r[0], 'platform': r[1], 'username': r[2], 'created_at': r[3], 'note': r[4]} for r in rows]
 
-        # Flask 앱 로거에 핸들러 추가
-        app.logger.addHandler(tk_handler)
-    def submit(self):
-        platform = self.platform_var.get()
-        username = self.username_var.get()
-        password = self.password_var.get()
+    def get_account(self, id_):
+        cur = self.conn.cursor()
+        cur.execute("SELECT id, platform, username, password, note, created_at FROM accounts WHERE id=?", (id_,))
+        r = cur.fetchone()
+        if not r:
+            return None
+        return {'id': r[0], 'platform': r[1], 'username': r[2], 'password': r[3], 'note': r[4], 'created_at': r[5]}
 
-        if not platform or not username or not password:
-            messagebox.showerror("오류", "모든 필드를 입력해주세요.")
+    def decrypt_password(self, id_):
+        # return plaintext password for given id
+        rec = self.get_account(id_)
+        print("decrypt_password", rec)
+        if not rec:
+            raise VaultError('Not found')
+        if self.backend == 'sqlcipher':
+            # in SQLCipher mode we stored plaintext password already (DB itself is encrypted)
+            return rec['password']
+        else:
+            token = rec['password']
+            print("decrypt_password", token)
+            try:
+                return base64.b64decode(self.fernet.decrypt(token.encode()).decode()).decode()
+            except Exception as e:
+                raise VaultError('Decryption failed')
+
+    def delete_account(self, id_):
+        cur = self.conn.cursor()
+        cur.execute("DELETE FROM accounts WHERE id=?", (id_,))
+        self.conn.commit()
+
+    def update_account(self, id_, platform, username, password, note=""):
+        if password is None:
+            # keep existing
+            password = self.decrypt_password(id_)
+        if self.backend == 'sqlcipher':
+            cur = self.conn.cursor()
+            cur.execute("UPDATE accounts SET platform=?, username=?, password=?, note=? WHERE id=?", (platform, username, password, note, id_))
+            self.conn.commit()
+        else:
+            token = self.fernet.encrypt(base64.b64encode(password.encode())).decode()
+            cur = self.conn.cursor()
+            cur.execute("UPDATE accounts SET platform=?, username=?, password=?, note=? WHERE id=?", (platform, username, token, note, id_))
+            self.conn.commit()
+
+# --------------------------- Utilities ---------------------------
+
+def base64_urlsafe_from_bytes(b: bytes) -> bytes:
+    """Convert 32 bytes to a Fernet key (base64 urlsafe)"""
+    return base64.urlsafe_b64encode(b)
+
+# --------------------------- GUI ---------------------------
+
+class VaultGUI:
+    def __init__(self, vault: Vault):
+        self.vault = vault
+        self.root = Tk()
+        self.root.title("Secure Login Vault")
+        self.root.geometry("920x600")
+        self.style = ttk.Style(self.root)
+        self._accounts_hash = None
+        # use clam and configure styles
+        try:
+            self.style.theme_use('clam')
+        except Exception:
+            pass
+        self._setup_styles()
+        self._build_ui()
+        self._refresh_list()
+        self.flask_thread = None
+        self.flask_app = None
+        self._check_for_updates()
+
+    def _setup_styles(self):
+        self.style.configure('TFrame', background='#f8f9fa')
+        self.style.configure('TLabel', background='#f8f9fa')
+        self.style.configure('Header.TLabel', font=('Segoe UI', 18, 'bold'))
+        self.style.configure('Accent.TButton', font=('Segoe UI', 10, 'bold'))
+
+    def _build_ui(self):
+        # panes
+        left = ttk.Frame(self.root, width=320)
+        left.pack(side='left', fill='y', padx=12, pady=12)
+        right = ttk.Frame(self.root)
+        right.pack(side='right', expand=True, fill='both', padx=12, pady=12)
+
+        ttk.Label(left, text='Vault', style='Header.TLabel').pack(anchor='w')
+        self.search_var = StringVar()
+        sbox = ttk.Entry(left, textvariable=self.search_var)
+        sbox.pack(fill='x', pady=(8,6))
+        sbox.bind('<KeyRelease>', lambda e: self._refresh_list())
+
+        self.accounts_list = tk.Listbox(left, height=25)
+        self.accounts_list.pack(fill='both', expand=True)
+        self.accounts_list.bind('<<ListboxSelect>>', lambda e: self._on_select())
+
+        btn_frame = ttk.Frame(left)
+        btn_frame.pack(fill='x', pady=8)
+        ttk.Button(btn_frame, text='Add', command=self._add_entry).pack(side='left', expand=True, fill='x')
+        ttk.Button(btn_frame, text='Import', command=self._import_html).pack(side='left', expand=True, fill='x')
+        ttk.Button(btn_frame, text='Migrate', command=self._migrate_data).pack(side='left', expand=True, fill='x')
+        ttk.Button(btn_frame, text='Edit', command=self._edit_entry).pack(side='left', expand=True, fill='x')
+        ttk.Button(btn_frame, text='Delete', command=self._delete_entry).pack(side='left', expand=True, fill='x')
+
+        # Right: details
+        ttk.Label(right, text='Details', style='Header.TLabel').pack(anchor='w')
+        details = ttk.Frame(right)
+        details.pack(fill='both', expand=True, pady=(8,0))
+
+        self.platform_var = StringVar()
+        self.username_var = StringVar()
+        self.note_var = StringVar()
+
+        ttk.Label(details, text='Platform').pack(anchor='w')
+        ttk.Entry(details, textvariable=self.platform_var, state='readonly').pack(fill='x')
+        ttk.Label(details, text='Username').pack(anchor='w', pady=(8,0))
+        ttk.Entry(details, textvariable=self.username_var, state='readonly').pack(fill='x')
+        ttk.Label(details, text='Note').pack(anchor='w', pady=(8,0))
+        ttk.Entry(details, textvariable=self.note_var, state='readonly').pack(fill='x')
+
+        action_frame = ttk.Frame(right)
+        action_frame.pack(fill='x', pady=12)
+        ttk.Button(action_frame, text='Show password', style='Accent.TButton', command=self._show_password).pack(side='left')
+        ttk.Button(action_frame, text='Run local web UI', command=self._run_web_ui).pack(side='left', padx=8)
+        ttk.Button(action_frame, text='Export to HTML', command=self._export_html).pack(side='left', padx=8)
+
+    def _check_for_updates(self):
+        try:
+            accounts = self.vault.list_accounts()
+            new_hash = json.dumps(accounts)
+            if new_hash != self._accounts_hash:
+                self._accounts_hash = new_hash
+                self._refresh_list()
+        except Exception as e:
+            print(f"Error checking for updates: {e}")
+        finally:
+            self.root.after(2000, self._check_for_updates)
+
+    def _refresh_list(self, *_):
+        query = self.search_var.get().lower()
+        self.accounts_list.delete(0, 'end')
+        self._accounts = self.vault.list_accounts()
+        self._accounts_hash = json.dumps(self._accounts)
+        for a in self._accounts:
+            label = f"{a['platform']} — {a['username']}"
+            if query and query not in label.lower():
+                continue
+            self.accounts_list.insert('end', label)
+
+    def _on_select(self):
+        idx = self.accounts_list.curselection()
+        if not idx:
+            return
+        i = idx[0]
+        rec = self._accounts[i]
+        self.platform_var.set(rec['platform'])
+        self.username_var.set(rec['username'])
+        self.note_var.set(rec.get('note') or '')
+        self._selected_id = rec['id']
+
+    def _migrate_data(self):
+        path = filedialog.askopenfilename(
+            title="Select old JSON file to migrate",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+        )
+        if not path:
             return
 
-        result = create_or_update_html(platform, username, password)
-        if result == "update_query":
-            if messagebox.askyesno("업데이트", "이미 존재하는 플랫폼입니다. 업데이트하시겠습니까?"):
-                create_or_update_html(platform, username, password, update=True)
-                logging.getLogger('tkinter_logger').info(f"Successfully updated user login information")
-                messagebox.showinfo("성공", "로그인 정보가 업데이트되었습니다.")
-            else:
-                messagebox.showinfo("취소", "업데이트가 취소되었습니다.")
-        else:
-            logging.getLogger('tkinter_logger').info(f"Successfully saved user login information")
-            messagebox.showinfo("성공", "로그인 정보가 저장되었습니다.")
+        modal = Toplevel(self.root)
+        modal.title('Migrating...')
+        modal.geometry('360x120')
+        modal.transient(self.root)
+        ttk.Label(modal, text='Reading migration file...').pack(pady=8)
+        pb = ttk.Progressbar(modal, mode='determinate', maximum=100)
+        pb.pack(fill='x', padx=12, pady=6)
+        progress_var = StringVar()
+        ttk.Label(modal, textvariable=progress_var).pack(pady=4)
 
-        self.clear_entries()
-        self.refresh_platform_list()
-
-    def delete(self):
-        selection = self.platform_listbox.curselection()
-        if selection:
-            platform = self.platform_listbox.get(selection[0])
-            if messagebox.askyesno("삭제 확인", f"{platform} 플랫폼을 삭제하시겠습니까?"):
-                if delete_platform(platform):
-                    logging.getLogger('tkinter_logger').info(f"Delete Platform {platform} Successful")
-                    messagebox.showinfo("성공", f"{platform} 플랫폼이 삭제되었습니다.")
-                    self.refresh_platform_list()
-                else:
-                    logging.getLogger('tkinter_logger').info(f"Failed to delete platform {platform}")
-                    messagebox.showerror("오류", f"{platform} 플랫폼을 삭제하는 데 실패했습니다.")
-        else:
-            messagebox.showwarning("경고", "삭제할 플랫폼을 선택해주세요.")
-
-    def clear_entries(self):
-        self.platform_var.set("")
-        self.username_var.set("")
-        self.password_var.set("")
-
-    def refresh_platform_list(self):
-        filename = "user_info.html"
-        self.platform_listbox.delete(0, tk.END)
-        if os.path.exists(filename):
-            with open(filename, "r", encoding="utf-8") as file:
-                content = file.read()
-            data_start = content.find("var userData = ") + len("var userData = ")
-            data_end = content.find("};", data_start) + 1
-            user_data = json.loads(content[data_start:data_end])
-            for platform in user_data.keys():
-                self.platform_listbox.insert(tk.END, platform)
-
-    def rename_platform(self):
-        selection = self.platform_listbox.curselection()
-        if selection:
-            old_platform = self.platform_listbox.get(selection[0])
-            new_platform = simpledialog.askstring("이름 변경", f"{old_platform}의 새 이름을 입력하세요:")
-            if new_platform:
-                if self.update_platform_name(old_platform, new_platform):
-                    logging.getLogger('tkinter_logger').info(f"Platform name updated: {old_platform} -> {new_platform}")
-                    messagebox.showinfo("성공", f"{old_platform}의 이름이 {new_platform}(으)로 변경되었습니다.")
-                    self.refresh_platform_list()
-                else:
-                    logging.getLogger('tkinter_logger').info(f"Failed to update platform name: {old_platform} -> {new_platform}")
-                    messagebox.showerror("오류", "플랫폼 이름 변경에 실패했습니다.")
-        else:
-            messagebox.showwarning("경고", "이름을 변경할 플랫폼을 선택해주세요.")
-
-    def update_platform_name(self, old_platform, new_platform):
-        filename = "user_info.html"
-        if os.path.exists(filename):
-            with open(filename, "r", encoding="utf-8") as file:
-                content = file.read()
-            
-            data_start = content.find("var userData = ") + len("var userData = ")
-            data_end = content.find("};", data_start) + 1
-            user_data = json.loads(content[data_start:data_end])
-            
-            if old_platform in user_data:
-                user_data[new_platform] = user_data.pop(old_platform)
+        def do_migration():
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    data_to_migrate = json.load(f)
                 
-                new_data_json = json.dumps(user_data, indent=2)
-                new_content = content[:data_start] + new_data_json + content[data_end:]
+                total = len(data_to_migrate)
+                pb['maximum'] = total
+
+                existing_accounts = self.vault.list_accounts()
+                existing_set = {(acc['platform'], acc['username']) for acc in existing_accounts}
                 
-                with open(filename, "w", encoding="utf-8") as file:
-                    file.write(new_content)
-                return True
+                added_count = 0
+                skipped_count = 0
+
+                for i, (platform, details) in enumerate(data_to_migrate.items()):
+                    progress_var.set(f'Processing {i+1}/{total}')
+                    pb['value'] = i + 1
+
+                    username = details.get('username')
+                    password = details.get('password')
+
+                    if not (username and password):
+                        skipped_count += 1
+                        continue
+
+                    if (platform, username) in existing_set:
+                        skipped_count += 1
+                        continue
+                    
+                    # Convert timestamp if it exists
+                    created_at_iso = None
+                    if 'timestamp' in details:
+                        try:
+                            # Old format: "2024-08-08 14:38:04"
+                            dt_obj = datetime.strptime(details['timestamp'], '%Y-%m-%d %H:%M:%S')
+                            created_at_iso = dt_obj.isoformat()
+                        except (ValueError, TypeError):
+                            pass # Ignore invalid timestamps
+
+                    self.vault.add_account(
+                        platform=platform,
+                        username=username,
+                        password=password,
+                        created_at=created_at_iso
+                    )
+                    added_count += 1
+                
+                modal.destroy()
+                summary = f"Migration complete.\nAdded: {added_count}\nSkipped (duplicates/invalid): {skipped_count}."
+                messagebox.showinfo("Migration Complete", summary)
+                self._refresh_list()
+
+            except Exception as e:
+                modal.destroy()
+                messagebox.showerror("Migration Failed", f'An error occurred: {e}')
+
+        threading.Thread(target=do_migration, daemon=True).start()
+
+    def _import_html(self):
+        path = filedialog.askopenfilename(
+            filetypes=[("HTML files", "*.html"), ("All files", "*.*")]
+        )
+        if not path:
+            return
+
+        modal = Toplevel(self.root)
+        modal.title('Importing...')
+        modal.geometry('360x120')
+        modal.transient(self.root)
+        ttk.Label(modal, text='Reading import file...').pack(pady=8)
+        pb = ttk.Progressbar(modal, mode='determinate', maximum=100)
+        pb.pack(fill='x', padx=12, pady=6)
+        progress_var = StringVar()
+        ttk.Label(modal, textvariable=progress_var).pack(pady=4)
+
+        def do_import():
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    html_content = f.read()
+
+                match = re.search(r'const accounts = (.*?);', html_content, re.DOTALL)
+                if not match:
+                    modal.destroy()
+                    messagebox.showerror("Error", "Could not find account data in the file.")
+                    return
+
+                json_data = match.group(1)
+                imported_accounts = json.loads(json_data)
+                total = len(imported_accounts)
+                pb['maximum'] = total
+
+                existing_accounts = self.vault.list_accounts()
+                existing_set = {(acc['platform'], acc['username']) for acc in existing_accounts}
+                
+                added_count = 0
+                skipped_count = 0
+
+                for i, acc in enumerate(imported_accounts):
+                    progress_var.set(f'Processing {i+1}/{total}')
+                    pb['value'] = i + 1
+
+                    if (acc['platform'], acc['username']) in existing_set:
+                        skipped_count += 1
+                        continue
+                    
+                    self.vault.add_account(
+                        platform=acc['platform'],
+                        username=acc['username'],
+                        password=acc['password'],
+                        note=acc.get('note', '')
+                    )
+                    added_count += 1
+                
+                modal.destroy()
+                summary = f"Import complete.\nAdded: {added_count}\nSkipped (duplicates): {skipped_count}."
+                messagebox.showinfo("Import Complete", summary)
+                self._refresh_list()
+
+            except Exception as e:
+                modal.destroy()
+                messagebox.showerror("Import Failed", f'An error occurred: {e}')
+
+        threading.Thread(target=do_import, daemon=True).start()
+
+    def _add_entry(self):
+        dlg = EntryDialog(self.root, "Add entry")
+        if dlg.result:
+            platform, username, password, note = dlg.result
+            self.vault.add_account(platform, username, password, note)
+            self._refresh_list()
+
+    def _edit_entry(self):
+        if not hasattr(self, '_selected_id'):
+            messagebox.showinfo('Info', 'Select an entry first')
+            return
+        rec = self.vault.get_account(self._selected_id)
+        dlg = EntryDialog(self.root, "Edit entry", (rec['platform'], rec['username'], None, rec.get('note') or ''))
+        if dlg.result:
+            print("_edit_entry", dlg.result)
+            platform, username, password, note = dlg.result
+            # if password is None (user left blank), keep existing
+            self.vault.update_account(self._selected_id, platform, username, password, note)
+            self._refresh_list()
+
+    def _delete_entry(self):
+        if not hasattr(self, '_selected_id'):
+            messagebox.showinfo('Info', 'Select an entry first')
+            return
+        if messagebox.askyesno('Confirm', 'Delete selected entry?'):
+            self.vault.delete_account(self._selected_id)
+            self._refresh_list()
+
+    def _show_password(self):
+        if not hasattr(self, '_selected_id'):
+            messagebox.showinfo('Info', 'Select an entry first')
+            return
+        # show a modal with a progress bar, then reveal password
+        modal = Toplevel(self.root)
+        modal.title('Decrypting...')
+        modal.geometry('360x120')
+        modal.transient(self.root)
+        ttk.Label(modal, text='Decrypting password...').pack(pady=8)
+        pb = ttk.Progressbar(modal, mode='indeterminate')
+        pb.pack(fill='x', padx=12, pady=6)
+        pb.start(10)
+
+        def do_decrypt():
+            try:
+                # simulate a short delay for UI effect
+                time.sleep(0.6)
+                pw = self.vault.decrypt_password(self._selected_id)
+                pb.stop()
+                modal.destroy()
+                # show result in a simple dialog
+                messagebox.showinfo('Password', f'Password: {pw}')
+            except Exception as e:
+                pb.stop()
+                modal.destroy()
+                messagebox.showerror('Error', str(e))
+
+        threading.Thread(target=do_decrypt, daemon=True).start()
+
+    def _run_web_ui(self):
+        if self.flask_thread and self.flask_thread.is_alive():
+            messagebox.showinfo('Info', 'Web UI already running at http://127.0.0.1:5000')
+            return
+        self.flask_app = create_flask_app(self.vault)
+        def run_app():
+            # only bind to localhost for safety
+            self.flask_app.run(host='127.0.0.1', port=5000, debug=False, threaded=True, use_reloader=False)
+        self.flask_thread = threading.Thread(target=run_app, daemon=True)
+        self.flask_thread.start()
+        time.sleep(0.5)  # give server time to start
+        messagebox.showinfo('Web UI', 'Web UI launched at http://127.0.0.1:5000')
+
+    def _export_html(self):
+        modal = Toplevel(self.root)
+        modal.title('Exporting...')
+        modal.geometry('360x120')
+        modal.transient(self.root)
+        ttk.Label(modal, text='Preparing export file...').pack(pady=8)
+        pb = ttk.Progressbar(modal, mode='determinate', maximum=100)
+        pb.pack(fill='x', padx=12, pady=6)
+        progress_var = StringVar()
+        ttk.Label(modal, textvariable=progress_var).pack(pady=4)
+
+        def do_export():
+            try:
+                accounts = self.vault.list_accounts()
+                total = len(accounts)
+                pb['maximum'] = total
+                
+                accounts_with_passwords = []
+                progress_var.set(f'Decrypting 0/{total}')
+
+                for i, acc in enumerate(accounts):
+                    try:
+                        password = self.vault.decrypt_password(acc['id'])
+                        acc['password'] = password
+                        accounts_with_passwords.append(acc)
+                    except Exception:
+                        continue # Skip if a password fails
+                    finally:
+                        pb['value'] = i + 1
+                        progress_var.set(f'Decrypting {i+1}/{total}')
+                
+                # Manually render the template
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                template_path = os.path.join(script_dir, 'templates', 'export_template.html')
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    template_str = f.read()
+
+                generation_date = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+                rendered_html = template_str.replace('{{ accounts_json | safe }}', json.dumps(accounts_with_passwords))
+                rendered_html = rendered_html.replace('{{ generation_date }}', generation_date)
+
+                modal.destroy()
+
+                save_path = filedialog.asksaveasfilename(
+                    defaultextension=".html",
+                    filetypes=[("HTML files", "*.html"), ("All files", "*.*")],
+                    title="Save Vault Export"
+                )
+                
+                if save_path:
+                    with open(save_path, 'w', encoding='utf-8') as f:
+                        f.write(rendered_html)
+                    messagebox.showinfo('Success', f'Vault exported successfully to {save_path}')
+
+            except Exception as e:
+                modal.destroy()
+                messagebox.showerror('Export Failed', f'An error occurred: {e}')
+
+        threading.Thread(target=do_export, daemon=True).start()
+
+
+    def run(self):
+        self.root.mainloop()
+
+
+class EntryDialog(simpledialog.Dialog):
+    def __init__(self, parent, title, initial=None):
+        self.initial = initial
+        super().__init__(parent, title)
+
+    def body(self, master):
+        ttk.Label(master, text='Platform').grid(row=0, column=0, sticky='w')
+        self.platform_e = ttk.Entry(master)
+        self.platform_e.grid(row=0, column=1, sticky='ew')
+        ttk.Label(master, text='Username').grid(row=1, column=0, sticky='w')
+        self.user_e = ttk.Entry(master)
+        self.user_e.grid(row=1, column=1, sticky='ew')
+        ttk.Label(master, text='Password (leave blank to keep existing)').grid(row=2, column=0, sticky='w')
+        self.pw_e = ttk.Entry(master, show='*')
+        self.pw_e.grid(row=2, column=1, sticky='ew')
+        ttk.Label(master, text='Note').grid(row=3, column=0, sticky='w')
+        self.note_e = ttk.Entry(master)
+        self.note_e.grid(row=3, column=1, sticky='ew')
+        if self.initial:
+            self.platform_e.insert(0, self.initial[0])
+            self.user_e.insert(0, self.initial[1])
+            # password left blank intentionally
+            self.note_e.insert(0, self.initial[3])
+        return self.platform_e
+
+    def apply(self):
+        pw = self.pw_e.get().strip() or None
+        self.result = (self.platform_e.get(), self.user_e.get(), pw, self.note_e.get())
+        
+# --------------------------- Flask web UI --------------------------
+
+
+def create_flask_app(vault: Vault):
+    # Get the directory where this script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    template_folder = os.path.join(script_dir, 'templates')
     
-        return False
+    app = Flask(__name__, template_folder=template_folder)
     
-    def open_server(self):
-        webbrowser.open("http://127.0.0.1:5000")
+    # Add logging
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    
+    @app.route('/')
+    def index():
+        return render_template('index.html', bootstrap_cdn=BOOTSTRAP_CDN)
 
-    def run_server(self):
-        run_flask()
+    @app.route('/api/ping', methods=['GET', 'POST'])
+    def api_ping():
+        """Health check endpoint"""
+        return jsonify({'status': 'ok', 'message': 'Server is running'})
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    gui = GUI(root)
+    @app.route('/api/list')
+    def api_list():
+        try:
+            accounts = vault.list_accounts()
+            app.logger.info(f"Returning {len(accounts)} accounts")
+            return jsonify(accounts)
+        except Exception as e:
+            app.logger.error(f"Error in /api/list: {e}")
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
 
-    root.mainloop()
+    @app.route('/api/decrypt', methods=['POST'])
+    def api_decrypt():
+        id_ = request.args.get('id', type=int)
+        if id_ is None:
+            app.logger.error("Missing id parameter")
+            return jsonify({'error': 'Missing id parameter'}), 400
+        try:
+            # Add a small delay for visual feedback
+            time.sleep(0.3)
+            # decrypt -- this uses the in-memory master password
+            pw = vault.decrypt_password(id_)
+            app.logger.info(f"Successfully decrypted password for id {id_}")
+            return jsonify({'password': pw})
+        except VaultError as e:
+            app.logger.error(f"Vault error for id {id_}: {e}")
+            return jsonify({'error': str(e)}), 404
+        except Exception as e:
+            app.logger.error(f"Error decrypting password for id {id_}: {e}")
+            traceback.print_exc()
+            return jsonify({'error': 'Decryption failed'}), 500
+
+    @app.route('/api/add', methods=['POST'])
+    def api_add():
+        data = request.json
+        if not data or not all(k in data for k in ['platform', 'username', 'password']):
+            app.logger.error("Missing fields in add request")
+            return jsonify({'error': 'Missing required fields: platform, username, password'}), 400
+        try:
+            new_id = vault.add_account(
+                platform=data['platform'],
+                username=data['username'],
+                password=data['password'],
+                note=data.get('note', '')
+            )
+            app.logger.info(f"Added new account with id {new_id}")
+            return jsonify({'status': 'ok', 'id': new_id}), 201
+        except Exception as e:
+            app.logger.error(f"Error in /api/add: {e}")
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/edit/<int:id_>', methods=['POST'])
+    def api_edit(id_):
+        data = request.json
+        if not data or not all(k in data for k in ['platform', 'username']):
+            app.logger.error(f"Missing fields in edit request for id {id_}")
+            return jsonify({'error': 'Missing required fields: platform, username'}), 400
+        try:
+            password = data.get('password')
+            if not password or not password.strip(): # If password is empty, None, or just whitespace
+                password = None  # keep existing
+
+            vault.update_account(
+                id_=id_,
+                platform=data['platform'],
+                username=data['username'],
+                password=password,
+                note=data.get('note', '')
+            )
+            app.logger.info(f"Updated account id {id_}")
+            return jsonify({'status': 'ok'})
+        except Exception as e:
+            app.logger.error(f"Error in /api/edit/{id_}: {e}")
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/delete/<int:id_>', methods=['POST'])
+    def api_delete(id_):
+        try:
+            vault.delete_account(id_)
+            app.logger.info(f"Deleted account id {id_}")
+            return jsonify({'status': 'ok'})
+        except Exception as e:
+            app.logger.error(f"Error in /api/delete/{id_}: {e}")
+            traceback.print_exc()
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/export')
+    def api_export():
+        try:
+            accounts = vault.list_accounts()
+            accounts_with_passwords = []
+            for acc in accounts:
+                try:
+                    password = vault.decrypt_password(acc['id'])
+                    acc['password'] = password
+                    accounts_with_passwords.append(acc)
+                except Exception:
+                    app.logger.error(f"Could not decrypt password for account id {acc['id']} during export.")
+                    continue
+            
+            generation_date = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+            return render_template('export_template.html', accounts_json=json.dumps(accounts_with_passwords), generation_date=generation_date)
+        except Exception as e:
+            app.logger.error(f"Error in /api/export: {e}")
+            traceback.print_exc()
+            return "Error generating export file.", 500
+
+    @app.route('/api/import', methods=['POST'])
+    def api_import():
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file part'}), 400
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No selected file'}), 400
+
+        try:
+            html_content = file.read().decode('utf-8')
+            
+            match = re.search(r'const accounts = (.*?);', html_content, re.DOTALL)
+            if not match:
+                return jsonify({'error': 'Could not find account data in the file.'}), 400
+            
+            json_data = match.group(1)
+            imported_accounts = json.loads(json_data)
+
+            # Check for duplicates
+            existing_accounts = vault.list_accounts()
+            existing_set = {(acc['platform'], acc['username']) for acc in existing_accounts}
+            
+            added_count = 0
+            skipped_count = 0
+
+            for acc in imported_accounts:
+                if (acc['platform'], acc['username']) in existing_set:
+                    skipped_count += 1
+                    continue
+                
+                vault.add_account(
+                    platform=acc['platform'],
+                    username=acc['username'],
+                    password=acc['password'], # Password in export is already plaintext
+                    note=acc.get('note', '')
+                )
+                added_count += 1
+            
+            summary = f"Import complete. Added: {added_count}, Skipped (duplicates): {skipped_count}."
+            app.logger.info(summary)
+            return jsonify({'status': 'ok', 'message': summary})
+
+        except Exception as e:
+            app.logger.error(f"Error in /api/import: {e}")
+            traceback.print_exc()
+            return jsonify({'error': 'An error occurred during import.'}), 500
+
+    return app
+
+# --------------------------- Main ---------------------------
+
+def prompt_master():
+    root = Tk()
+    root.withdraw()
+    mp = simpledialog.askstring('Master password', 'Enter master password for the vault:', show='*', parent=root)
+    root.destroy()
+    if not mp:
+        print('Master password required. Exiting.')
+        sys.exit(1)
+    return mp
+
+if __name__ == '__main__':
+    mp = prompt_master()
+    vault = Vault(mp)
+    gui = VaultGUI(vault)
+    gui.run()
