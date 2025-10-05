@@ -1,1 +1,1 @@
-- [`inndex.html`](index,html) - index page
+- [`inndex.html`](index.html) - index page
