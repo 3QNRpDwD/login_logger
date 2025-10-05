@@ -28,8 +28,12 @@ import threading
 import traceback
 import re
 from datetime import datetime
-import urllib.request
 import base64
+import time
+import socket
+import webbrowser
+import subprocess
+
 
 
 try:
@@ -59,11 +63,23 @@ import tkinter as tk
 # Flask and web server
 from flask import Flask, jsonify, request, render_template, abort
 
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, relative_path)
+
+
 # --------------------------- Vault backend ---------------------------
 
 META_FILE = "vault_meta.json"
 DB_FILE = "vault.db"
 FALLBACK_DB_FILE = "vault_plain.db"
+CACHE_FILE = "vault.cache"
 
 SALT_SIZE = 16
 KDF_ITER = 390000
@@ -221,6 +237,80 @@ class Vault:
 def base64_urlsafe_from_bytes(b: bytes) -> bytes:
     """Convert 32 bytes to a Fernet key (base64 urlsafe)"""
     return base64.urlsafe_b64encode(b)
+
+# --------------------------- Caching ---------------------------
+
+class PasswordCacher:
+    def __init__(self):
+        self.machine_id = self._get_machine_id()
+        self.fernet = None
+        if self.machine_id:
+            try:
+                # Derive a key from the machine ID
+                kdf = PBKDF2HMAC(
+                    algorithm=hashes.SHA256(),
+                    length=32,
+                    salt=b'vault-cache-salt', # Fixed salt is fine here
+                    iterations=100000,
+                    backend=default_backend()
+                )
+                key = kdf.derive(self.machine_id.encode())
+                self.fernet = Fernet(base64.urlsafe_b64encode(key))
+            except Exception as e:
+                print(f"Could not initialize password cacher: {e}")
+
+    def _get_machine_id(self):
+        if sys.platform == 'win32':
+            try:
+                return subprocess.check_output('wmic csproduct get uuid').decode().split('\n')[1].strip()
+            except Exception:
+                try:
+                    return subprocess.check_output('wmic path win32_logicaldisk where "DeviceID=\'C:\'" get VolumeSerialNumber').decode().split('\n')[1].strip()
+                except Exception as e:
+                    print(f"Could not get machine ID for caching: {e}")
+                    return None
+        else:
+            print("Password caching is currently only supported on Windows.")
+            return None
+
+    def get_cached_password(self):
+        if not self.fernet or not os.path.exists(CACHE_FILE):
+            return None
+        try:
+            with open(CACHE_FILE, 'rb') as f:
+                token = f.read()
+            decrypted_pw = self.fernet.decrypt(token)
+            return decrypted_pw.decode()
+        except Exception as e:
+            print(f"Failed to read cached password: {e}")
+            if os.path.exists(CACHE_FILE):
+                os.remove(CACHE_FILE)
+            return None
+
+    def cache_password(self, password):
+        if not self.fernet:
+            return
+        try:
+            token = self.fernet.encrypt(password.encode())
+            with open(CACHE_FILE, 'wb') as f:
+                f.write(token)
+            print("Password has been cached.")
+        except Exception as e:
+            print(f"Failed to cache password: {e}")
+
+    def ask_and_cache(self, password):
+        root = Tk()
+        root.withdraw()
+        should_cache = messagebox.askyesno(
+            "Cache Password",
+            "Do you want to cache the master password for automatic login on this computer?\n\n"
+            "Warning: This is convenient but less secure. The password will be stored in an encrypted file on this machine.",
+            parent=root
+        )
+        root.destroy()
+        if should_cache:
+            self.cache_password(password)
+
 
 # --------------------------- GUI ---------------------------
 
@@ -536,13 +626,29 @@ class VaultGUI:
             messagebox.showinfo('Info', 'Web UI already running at http://127.0.0.1:5000')
             return
         self.flask_app = create_flask_app(self.vault)
+
         def run_app():
             # only bind to localhost for safety
             self.flask_app.run(host='127.0.0.1', port=5000, debug=False, threaded=True, use_reloader=False)
+
+        def wait_for_port(host, port, timeout=5.0):
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                try:
+                    with socket.create_connection((host, port), timeout=0.5):
+                        return True
+                except OSError:
+                    time.sleep(0.1)
+            return False
+
         self.flask_thread = threading.Thread(target=run_app, daemon=True)
         self.flask_thread.start()
-        time.sleep(0.5)  # give server time to start
-        messagebox.showinfo('Web UI', 'Web UI launched at http://127.0.0.1:5000')
+
+        if wait_for_port('127.0.0.1', 5000, timeout=5.0):
+            webbrowser.open_new_tab('http://127.0.0.1:5000')
+            messagebox.showinfo('Web UI', 'Web UI launched at http://127.0.0.1:5000')
+        else:
+            messagebox.showwarning('Web UI', '서버 시작에 실패했거나 포트가 열리지 않았습니다.')
 
     def _export_html(self):
         modal = Toplevel(self.root)
@@ -576,8 +682,7 @@ class VaultGUI:
                         progress_var.set(f'Decrypting {i+1}/{total}')
                 
                 # Manually render the template
-                script_dir = os.path.dirname(os.path.abspath(__file__))
-                template_path = os.path.join(script_dir, 'templates', 'export_template.html')
+                template_path = resource_path(os.path.join('templates', 'export_template.html'))
                 with open(template_path, 'r', encoding='utf-8') as f:
                     template_str = f.read()
 
@@ -643,8 +748,7 @@ class EntryDialog(simpledialog.Dialog):
 
 def create_flask_app(vault: Vault):
     # Get the directory where this script is located
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    template_folder = os.path.join(script_dir, 'templates')
+    template_folder = resource_path('templates')
     
     app = Flask(__name__, template_folder=template_folder)
     
@@ -832,7 +936,48 @@ def prompt_master():
     return mp
 
 if __name__ == '__main__':
-    mp = prompt_master()
-    vault = Vault(mp)
+    vault = None
+    cacher = PasswordCacher()
+
+    # Try cached password first
+    cached_mp = cacher.get_cached_password()
+    if cached_mp:
+        try:
+            print("Attempting login with cached password...")
+            v = Vault(cached_mp)
+            v.list_accounts() # Verify password by trying to read data
+            vault = v
+            print("Successfully logged in with cached password.")
+        except Exception as e:
+            print(f"Cached password was invalid, deleting cache. Reason: {e}")
+            if os.path.exists(CACHE_FILE):
+                os.remove(CACHE_FILE)
+    
+    # If no vault yet, prompt user
+    if not vault:
+        mp = prompt_master()
+        if not mp:
+            # User cancelled password prompt
+            sys.exit(1)
+        
+        try:
+            vault = Vault(mp)
+            vault.list_accounts() # Verify password
+            
+            # If successful, cache the password automatically
+            if cacher.fernet: # Check if caching is supported
+                cacher.cache_password(mp)
+
+        except Exception as e:
+            root = Tk()
+            root.withdraw()
+            messagebox.showerror("Login Failed", f"Failed to open vault. The password may be incorrect or the database is corrupt.\n\nError: {e}")
+            root.destroy()
+            sys.exit(1)
+
+    if not vault:
+        print("Could not initialize vault. Exiting.")
+        sys.exit(1)
+
     gui = VaultGUI(vault)
     gui.run()
