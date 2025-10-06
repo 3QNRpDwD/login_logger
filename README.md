@@ -10,6 +10,15 @@ Encryption uses a password that is entered during the first run of the program a
 
 <img width="916" height="623" alt="image" src="https://github.com/user-attachments/assets/4d2381fa-9131-4969-b723-d4d0f82549de" />
 
+<img width="1174" height="929" alt="image" src="https://github.com/user-attachments/assets/ca11e9c6-af6e-4cd2-862f-3f2e1c85e59e" />
+
+<img width="1156" height="884" alt="image" src="https://github.com/user-attachments/assets/578616f7-4b85-4d46-9d0b-8ebe8f5e7190" />
+
+
+
+
+
+
 
 
 
